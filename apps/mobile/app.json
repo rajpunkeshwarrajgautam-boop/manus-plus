@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Manus Plus",
+    "slug": "manus-plus-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}

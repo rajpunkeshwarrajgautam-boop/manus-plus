@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build / generated
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and caches
+*.log
+npm-debug.log*
+.turbo/
+.cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Test / coverage
+coverage/
+
+# Expo / React Native
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Electron
+release/
+
+# Misc
+*.local
+
+# Service local stores (file-backed dev persistence)
+**/.data/

@@ -1,0 +1,40 @@
+{
+  "name": "@manus-plus/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "author": "Manus Plus",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "node src/main.js",
+    "dev:electron": "electron src/main.js",
+    "build": "node -e \"console.log('desktop: run package:dir or package:dist to pack')\"",
+    "package:dir": "electron-builder --dir",
+    "package:dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.manusplus.desktop",
+    "productName": "Manus Plus",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "preview/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  },
+  "devDependencies": {
+    "electron": "^36.1.0",
+    "electron-builder": "^26.0.12"
+  }
+}

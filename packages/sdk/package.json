@@ -1,0 +1,10 @@
+{
+  "name": "@manus-plus/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@manus-plus/shared-types": "0.1.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "manus-plus",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @manus-plus/web",
+    "dev:orchestrator": "npm run dev -w @manus-plus/orchestrator",
+    "dev:browser": "npm run dev -w @manus-plus/browser-operator",
+    "dev:realtime": "npm run dev -w @manus-plus/realtime",
+    "dev:skills": "npm run dev -w @manus-plus/skills-registry",
+    "dev:apis": "concurrently -n orch,rt,br,sk -c blue,magenta,yellow,green \"npm run dev -w @manus-plus/orchestrator\" \"npm run dev -w @manus-plus/realtime\" \"npm run dev -w @manus-plus/browser-operator\" \"npm run dev -w @manus-plus/skills-registry\"",
+    "smoke:services": "concurrently -n orch,rt,br,sk,probe -c blue,magenta,yellow,green,cyan \"npm run dev -w @manus-plus/orchestrator\" \"npm run dev -w @manus-plus/realtime\" \"npm run dev -w @manus-plus/browser-operator\" \"npm run dev -w @manus-plus/skills-registry\" \"node scripts/wait-apis.mjs\"",
+    "smoke:stack": "concurrently -n orch,rt,br,sk,probe,web -c blue,magenta,yellow,green,cyan,white \"npm run dev -w @manus-plus/orchestrator\" \"npm run dev -w @manus-plus/realtime\" \"npm run dev -w @manus-plus/browser-operator\" \"npm run dev -w @manus-plus/skills-registry\" \"node scripts/wait-apis.mjs\" \"npm run dev -w @manus-plus/web\"",
+    "verify:health": "node scripts/verify-health.mjs",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "docker:up": "docker compose up --build",
+    "build": "npm run build --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "ci:integration": "concurrently --kill-others -s first -n apis,check \"npm run dev:apis\" \"node scripts/wait-apis.mjs && npm run verify:health && npm run e2e:smoke\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.9.3"
+  }
+}

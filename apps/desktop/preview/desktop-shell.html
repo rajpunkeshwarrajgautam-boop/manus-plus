@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manus Plus Desktop Shell</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: radial-gradient(circle at 70% 0%, #121d33 0%, #080b14 42%, #06080d 100%);
+      color: #e6eeff;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+    .window {
+      width: min(1220px, 94vw);
+      height: min(820px, 92vh);
+      border: 1px solid #26324a;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #0c1220dd;
+      display: grid;
+      grid-template-columns: 240px 1fr 330px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+      backdrop-filter: blur(8px);
+    }
+    .col { padding: 14px; border-right: 1px solid #1e293d; overflow: auto; }
+    .col:last-child { border-right: 0; }
+    .muted { color: #99acd1; font-size: 12px; }
+    .title { margin: 0; font-size: 34px; letter-spacing: -0.02em; line-height: 1.05; }
+    .card {
+      margin-top: 10px;
+      border: 1px solid #263553;
+      border-radius: 12px;
+      background: #10192bd9;
+      padding: 10px;
+      font-size: 13px;
+    }
+    .chip {
+      display: inline-block;
+      margin: 4px 4px 0 0;
+      padding: 6px 10px;
+      border: 1px solid #3c5587;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #c9dbff;
+      background: #1a2a46;
+      cursor: pointer;
+    }
+    .chip.active { border-color: #7ea3df; background: #2a4f8f; }
+    textarea {
+      width: 100%;
+      margin-top: 10px;
+      background: #070b14;
+      border: 1px solid #2a3551;
+      color: #e9f1ff;
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 90px;
+      resize: vertical;
+    }
+    .btn {
+      margin-top: 8px;
+      border-radius: 10px;
+      border: 1px solid #5f84c2;
+      background: linear-gradient(180deg, #2a4f8f 0%, #24437a 100%);
+      color: #f4f8ff;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #a9bcdf;
+    }
+    .filters {
+      margin-top: 10px;
+      display: flex;
+      gap: 6px;
+    }
+    .filter {
+      border: 1px solid #304261;
+      background: #111b2f;
+      color: #bed0f1;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .filter.active { border-color: #7ba0df; background: #2a4f8f; color: #eff5ff; }
+    .counterRow {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .counter {
+      border: 1px solid #314766;
+      background: #121e33;
+      color: #bfd4f8;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 11px;
+    }
+    .counterBtn {
+      border: 1px solid #46679d;
+      background: #173058;
+      color: #e3eeff;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .bubble {
+      margin-top: 10px;
+      border: 1px solid #2c3b58;
+      border-radius: 12px;
+      padding: 10px;
+      background: #101a2e;
+    }
+    .bubble.you { margin-left: 20%; border-color: #3f5f95; background: #162844; }
+  </style>
+</head>
+<body>
+  <main class="window">
+    <section class="col">
+      <h3 style="margin:0 0 8px;">Manus Plus</h3>
+      <div class="muted">Desktop workspace</div>
+      <div class="card">Start new run</div>
+      <div class="card">Recent runs<br/>run_1042 · completed<br/>run_1043 · running</div>
+      <div class="card">Runtime<br/>http://localhost:4100<br/>ws://localhost:4102</div>
+    </section>
+    <section class="col">
+      <h1 class="title">What do you want to build today?</h1>
+      <p class="muted">Autonomous execution with live planning and verification.</p>
+      <textarea id="prompt">Plan a launch strategy for Manus Plus.</textarea>
+      <div id="modes">
+        <button class="chip active" data-mode="research">research</button><button class="chip " data-mode="build">build</button><button class="chip " data-mode="analyze">analyze</button><button class="chip " data-mode="design">design</button>
+      </div>
+      <button id="run" class="btn">Run</button>
+      <div id="status" class="status">Status: idle</div>
+      <div id="filters" class="filters">
+        <button class="filter active" data-scope="all">All</button>
+        <button class="filter" data-scope="local">Local</button>
+        <button class="filter" data-scope="remote">Remote</button>
+      </div>
+      <div class="counterRow">
+        <span id="localCount" class="counter">Local 0</span>
+        <span id="remoteCount" class="counter">Remote 0</span>
+        <span id="dedupedCount" class="counter">Deduped 0</span>
+        <button id="resetCounters" class="counterBtn">Reset counters</button>
+        <button id="exportTelemetry" class="counterBtn">Export telemetry</button>
+      </div>
+      <div id="timeline">
+        <div class="bubble you">You: Plan a launch strategy for Manus Plus.</div>
+        <div class="bubble">Agent: step_created -> drafted launch milestones</div>
+        <div class="bubble">Agent: quality_gate -> score 88 passed=true</div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="card">Execution plan</div>
+      <div class="card">Browser operator</div>
+      <div class="card">Artifacts</div>
+      <div class="card">Ops metrics</div>
+    </section>
+  </main>
+  <script>
+    const timeline = document.getElementById("timeline");
+    const promptInput = document.getElementById("prompt");
+    const runButton = document.getElementById("run");
+    const statusText = document.getElementById("status");
+    const localCount = document.getElementById("localCount");
+    const remoteCount = document.getElementById("remoteCount");
+    const dedupedCount = document.getElementById("dedupedCount");
+    const resetCounters = document.getElementById("resetCounters");
+    const exportTelemetry = document.getElementById("exportTelemetry");
+    const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
+    const filterButtons = Array.from(document.querySelectorAll("[data-scope]"));
+    const orchestratorUrl = "http://localhost:4100";
+    const realtimeUrl = "ws://localhost:4102";
+    const collabSocket = new WebSocket(realtimeUrl);
+    let activeMode = "research";
+    let activeTaskId = "";
+    let timelineScope = "all";
+    let localEvents = 0;
+    let remoteEvents = 0;
+    let dedupedEvents = 0;
+    const seenRemote = new Set();
+
+    function updateCounters() {
+      localCount.textContent = "Local " + localEvents;
+      remoteCount.textContent = "Remote " + remoteEvents;
+      dedupedCount.textContent = "Deduped " + dedupedEvents;
+    }
+
+    resetCounters.addEventListener("click", () => {
+      localEvents = 0;
+      remoteEvents = 0;
+      dedupedEvents = 0;
+      seenRemote.clear();
+      updateCounters();
+      timeline.innerHTML = "";
+      appendTimeline("Counters reset.", "local");
+    });
+
+    exportTelemetry.addEventListener("click", () => {
+      const snapshot = {
+        client: "desktop",
+        generatedAt: new Date().toISOString(),
+        status: statusText.textContent ? statusText.textContent.replace("Status: ", "") : "unknown",
+        timelineScope,
+        localEventCount: localEvents,
+        remoteEventCount: remoteEvents,
+        dedupedRemoteCount: dedupedEvents,
+        activeTaskId: activeTaskId || null
+      };
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "manus-plus-desktop-telemetry-" + Date.now() + ".json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      appendTimeline("Telemetry snapshot exported.", "local");
+    });
+
+    function appendTimeline(text, source, variant) {
+      if (timelineScope === "local" && source !== "local") return;
+      if (timelineScope === "remote" && source !== "remote") return;
+      const row = document.createElement("div");
+      row.className = variant ? "bubble " + variant : "bubble";
+      row.textContent = text;
+      timeline.appendChild(row);
+      if (source === "remote") remoteEvents += 1;
+      else localEvents += 1;
+      updateCounters();
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
+    filterButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        timelineScope = btn.dataset.scope || "all";
+        filterButtons.forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+      });
+    });
+
+    collabSocket.addEventListener("open", () => {
+      appendTimeline("Realtime connected.", "remote");
+    });
+
+    collabSocket.addEventListener("message", (message) => {
+      try {
+        const payload = JSON.parse(String(message.data));
+        if (payload.type === "task_event" && payload.body) {
+          const dedupeKey = JSON.stringify(payload.body);
+          if (seenRemote.has(dedupeKey)) {
+            dedupedEvents += 1;
+            updateCounters();
+            return;
+          }
+          seenRemote.add(dedupeKey);
+          appendTimeline("Collab: " + dedupeKey, "remote");
+        }
+      } catch (error) {
+        appendTimeline("Realtime parse failed: " + String(error), "remote");
+      }
+    });
+
+    modeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeMode = btn.dataset.mode;
+        modeButtons.forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+      });
+    });
+
+    async function runTask(prompt) {
+      try {
+        statusText.textContent = "Status: running";
+        const response = await fetch(orchestratorUrl + "/tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-actor-id": "desktop-user",
+            "x-workspace-id": "desktop-workspace",
+            "x-role": "admin",
+            "idempotency-key": "desktop:" + Date.now()
+          },
+          body: JSON.stringify({
+            prompt: "[" + activeMode + "] " + prompt,
+            sessionId: "desktop-session",
+            maxRetries: 2
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+
+        if (!response.body) {
+          throw new Error("Missing response stream.");
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let sawCompletion = false;
+        while (true) {
+          const packet = await reader.read();
+          if (packet.done) break;
+          buffer += decoder.decode(packet.value, { stream: true });
+          const chunks = buffer.split("\n\n");
+          buffer = chunks.pop() || "";
+          chunks.forEach((chunk) => {
+            if (!chunk.trim()) return;
+          const eventMatch = chunk.match(/event:\s*(.+)/);
+          const dataMatch = chunk.match(/data:\s*(.+)/);
+          const eventName = eventMatch ? eventMatch[1] : "event";
+          const dataRaw = dataMatch ? dataMatch[1] : "{}";
+          let parsed = {};
+          try {
+            parsed = JSON.parse(dataRaw);
+          } catch {
+            parsed = { raw: dataRaw };
+          }
+          if (eventName === "task_started" && parsed && parsed.taskId) {
+            activeTaskId = parsed.taskId;
+            if (collabSocket.readyState === WebSocket.OPEN) {
+              collabSocket.send(JSON.stringify({ type: "join_task", taskId: activeTaskId }));
+            }
+          }
+          appendTimeline("Agent: " + eventName + " -> " + dataRaw, "local");
+          if (activeTaskId && collabSocket.readyState === WebSocket.OPEN) {
+            collabSocket.send(
+              JSON.stringify({
+                type: "task_event",
+                taskId: activeTaskId,
+                body: { event: eventName, content: parsed, origin: "desktop" }
+              })
+            );
+          }
+          if (eventName === "task_completed") sawCompletion = true;
+          });
+        }
+        statusText.textContent = sawCompletion ? "Status: completed" : "Status: running";
+      } catch (error) {
+        appendTimeline("Agent (" + activeMode + "): queued execution pipeline.", "local");
+        appendTimeline("Offline fallback: " + String(error && error.message ? error.message : error), "local");
+        statusText.textContent = "Status: offline fallback";
+      }
+    }
+
+    runButton.addEventListener("click", async () => {
+      const prompt = promptInput.value.trim();
+      if (!prompt) return;
+      appendTimeline("You: " + prompt, "local", "you");
+      await runTask(prompt);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "@manus-plus/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo/AppEntry",
+  "scripts": {
+    "dev": "node src/index.js",
+    "dev:expo": "expo start --clear",
+    "build": "tsc --noEmit",
+    "eas:preview": "eas build --profile preview",
+    "eas:production": "eas build --profile production",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "expo": "^53.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.79.0"
+  },
+  "devDependencies": {
+    "babel-preset-expo": "^13.0.0",
+    "eas-cli": "^16.0.0",
+    "typescript": "^5.9.3"
+  }
+}
