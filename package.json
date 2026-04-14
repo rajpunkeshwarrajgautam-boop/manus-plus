@@ -24,6 +24,7 @@
     "ci:integration": "concurrently --kill-others -s first -n apis,check \"npm run dev:apis\" \"node scripts/wait-apis.mjs && npm run verify:health && npm run e2e:smoke\""
   },
   "devDependencies": {
+    "@types/serve-static": "^1.15.10",
     "concurrently": "^9.1.2",
     "typescript": "^5.9.3"
   }
