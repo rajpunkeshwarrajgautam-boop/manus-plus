@@ -17,6 +17,8 @@ Health check (expects API processes running):
 npm run verify:health
 ```
 
+`verify-health.mjs` checks each API **`GET /health`** returns **200** and validates the JSON contract: lifecycle **`status`**, **`errorResponsesTotal`**, **`readinessFailuresTotal`**, and **`reliabilityMetricsResetAt`**. With **`DATABASE_URL`** set (e.g. in CI), it also asserts the orchestrator reports **`persistence`** **`postgres`**.
+
 Consolidated preflight:
 
 ```bash
