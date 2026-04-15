@@ -27,7 +27,7 @@ Ports: orchestrator **4100**, browser-operator **4101**, realtime **4102** (HTTP
 
 ### CI (GitHub Actions)
 
-On push/PR to `main` or `master`, `.github/workflows/ci.yml` runs **`npm ci`**, **`npm run type-check`**, **`npm run migrate:deploy -w @manus-plus/orchestrator`** (against a **Postgres 16** service), then **`npm run ci:integration`** (all four APIs + **Next.js dev** on **3000**, **`verify:health`**, **`e2e:smoke`**). CI sets **`DATABASE_URL`** so the orchestrator uses Postgres in that job.
+On push/PR to `main` or `master`, `.github/workflows/ci.yml` first validates Compose wiring with **`docker compose config`**, then runs **`npm ci`**, **`npm run type-check`**, **`npm run migrate:deploy -w @manus-plus/orchestrator`** (against a **Postgres 16** service), and **`npm run ci:integration`** (all four APIs + **Next.js dev** on **3000**, **`verify:health`**, **`e2e:smoke`**). CI sets **`DATABASE_URL`** so the orchestrator uses Postgres in that job.
 
 Locally, **`ci:integration`** still works **without** `DATABASE_URL` (orchestrator uses the JSON file store under `services/orchestrator/.data/runs.json`). Stop anything already bound to **4100–4103** and **3000** before running it, or you will get port conflicts.
 
