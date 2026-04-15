@@ -1,5 +1,6 @@
 /**
  * Probes /health on core services. Uses node:http(s) instead of fetch for reliable exit on Windows.
+ * Validates JSON shape for API services: lifecycle status + reliability counters.
  */
 import http from "node:http";
 import https from "node:https";
@@ -18,6 +19,8 @@ const targets = [
   ["skills-registry", SKILLS]
 ];
 
+const LIFECYCLE_STATUSES = new Set(["starting", "ready", "shutting_down"]);
+
 function pickLib(url) {
   return url.protocol === "https:" ? https : http;
 }
@@ -27,7 +30,7 @@ function pickLib(url) {
  * @param {{ timeoutMs?: number, maxBody?: number }} opts
  */
 function httpGet(fullUrl, opts = {}) {
-  const { timeoutMs = 8000, maxBody = 400 } = opts;
+  const { timeoutMs = 8000, maxBody = 4096 } = opts;
   const u = new URL(fullUrl);
   const lib = pickLib(u);
 
@@ -64,20 +67,68 @@ function httpGet(fullUrl, opts = {}) {
   });
 }
 
-async function ping(name, base) {
+/**
+ * @param {string} name
+ * @param {unknown} j
+ */
+function assertApiHealthContract(name, j) {
+  if (!j || typeof j !== "object") {
+    throw new Error(`${name}: /health body is not a JSON object`);
+  }
+  const o = /** @type {Record<string, unknown>} */ (j);
+  if (o.ok !== true) {
+    throw new Error(`${name}: expected ok: true`);
+  }
+  if (typeof o.status !== "string" || !LIFECYCLE_STATUSES.has(o.status)) {
+    throw new Error(`${name}: expected status in [starting, ready, shutting_down], got: ${String(o.status)}`);
+  }
+  if (typeof o.errorResponsesTotal !== "number" || !Number.isFinite(o.errorResponsesTotal)) {
+    const hint =
+      !("errorResponsesTotal" in o) ? " (restart API processes after upgrading so /health includes reliability fields)" : "";
+    throw new Error(`${name}: expected numeric errorResponsesTotal${hint}`);
+  }
+  if (typeof o.readinessFailuresTotal !== "number" || !Number.isFinite(o.readinessFailuresTotal)) {
+    throw new Error(`${name}: expected numeric readinessFailuresTotal`);
+  }
+  if (typeof o.reliabilityMetricsResetAt !== "string" || !o.reliabilityMetricsResetAt) {
+    throw new Error(`${name}: expected string reliabilityMetricsResetAt`);
+  }
+}
+
+async function checkApiService(name, base) {
   const url = `${base.replace(/\/$/, "")}/health`;
   try {
     const { ok, status, body } = await httpGet(url);
-    return { name, ok, status, snippet: body.slice(0, 120) };
+    if (!ok) {
+      return { name, ok: false, status, snippet: body.slice(0, 120), contractError: null };
+    }
+    let j;
+    try {
+      j = JSON.parse(body);
+    } catch (e) {
+      return { name, ok: false, status, snippet: body.slice(0, 120), contractError: `invalid JSON: ${e}` };
+    }
+    try {
+      assertApiHealthContract(name, j);
+    } catch (e) {
+      return {
+        name,
+        ok: false,
+        status,
+        snippet: body.slice(0, 120),
+        contractError: e instanceof Error ? e.message : String(e)
+      };
+    }
+    return { name, ok: true, status, snippet: body.slice(0, 120), contractError: null, json: j };
   } catch (e) {
-    return { name, ok: false, status: 0, snippet: String(e) };
+    return { name, ok: false, status: 0, snippet: String(e), contractError: null };
   }
 }
 
 async function main() {
   const results = [];
   for (const [name, base] of targets) {
-    results.push(await ping(name, base));
+    results.push(await checkApiService(name, base));
   }
 
   const expectPostgresOrchestrator = Boolean(process.env.DATABASE_URL?.trim());
@@ -87,19 +138,18 @@ async function main() {
       console.error("✗ orchestrator health failed; cannot assert persistence=postgres");
       process.exit(1);
     }
-    try {
-      const full = await httpGet(`${ORCH.replace(/\/$/, "")}/health`, { maxBody: 2048 });
-      const j = JSON.parse(full.body);
-      if (j.persistence !== "postgres") {
+    const j = orch.json;
+    if (j && typeof j === "object" && "persistence" in j) {
+      if (/** @type {{ persistence?: string }} */ (j).persistence !== "postgres") {
         console.error(
           `✗ orchestrator /health: expected persistence "postgres" when DATABASE_URL is set, got:`,
-          j.persistence
+          /** @type {{ persistence?: string }} */ (j).persistence
         );
         process.exit(1);
       }
       console.log(`✓ orchestrator persistence=postgres (DATABASE_URL set)`);
-    } catch (e) {
-      console.error("✗ orchestrator /health JSON check failed:", e);
+    } else {
+      console.error("✗ orchestrator /health: missing persistence field");
       process.exit(1);
     }
   }
@@ -113,7 +163,8 @@ async function main() {
   }
 
   for (const r of results) {
-    console.log(`${r.ok ? "✓" : "✗"} ${r.name} (${r.status}) ${r.snippet}`);
+    const contract = r.contractError ? ` CONTRACT: ${r.contractError}` : "";
+    console.log(`${r.ok ? "✓" : "✗"} ${r.name} (${r.status}) ${r.snippet}${contract}`);
   }
   console.log(`${webOk ? "✓" : "○"} web (${WEB}) ${webOk ? "responding" : "skipped or down"}`);
   const allCore = results.every((r) => r.ok);
