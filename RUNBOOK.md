@@ -27,7 +27,7 @@ Ports: orchestrator **4100**, browser-operator **4101**, realtime **4102** (HTTP
 
 ### CI (GitHub Actions)
 
-On push/PR to `main` or `master`, `.github/workflows/ci.yml` runs **`npm ci`**, **`npm run type-check`**, and **`npm run ci:integration`** (starts all four APIs, waits for `/health`, then **`verify:health`** + **`e2e:smoke`**). Stop anything already bound to **4100–4103** before running **`ci:integration`** locally, or you will get port conflicts.
+On push/PR to `main` or `master`, `.github/workflows/ci.yml` runs **`npm ci`**, **`npm run type-check`**, and **`npm run ci:integration`** (starts all four APIs + **Next.js dev** on **3000**, waits for `/health` and the web root, then **`verify:health`** + **`e2e:smoke`**). Stop anything already bound to **4100–4103** and **3000** before running **`ci:integration`** locally, or you will get port conflicts.
 
 ### Optional: Docker
 
