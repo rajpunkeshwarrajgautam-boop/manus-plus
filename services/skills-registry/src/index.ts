@@ -93,6 +93,16 @@ function sendError(
   return res.status(statusCode).json({ errorCode, error: message, ...extra });
 }
 
+app.use((req, res, next) => {
+  if (req.path.startsWith("/ops")) {
+    const role = String(req.headers["x-role"] || "user");
+    if (role !== "admin") {
+      return sendError(res, 403, "admin_role_required", "Admin role required");
+    }
+  }
+  next();
+});
+
 app.post("/skills", (req, res) => {
   const parsed = createSkillSchema.safeParse(req.body);
   if (!parsed.success) return sendError(res, 400, "invalid_skill_payload", "Invalid skill payload", { issues: parsed.error.issues });
