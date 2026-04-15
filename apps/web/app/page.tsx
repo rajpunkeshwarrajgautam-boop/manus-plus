@@ -126,6 +126,7 @@ export default function HomePage() {
   const [serviceHealth, setServiceHealth] = useState<string>("No health data yet.");
   const [opsSnapshotCopyState, setOpsSnapshotCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [opsBundleCopyState, setOpsBundleCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [opsRefreshState, setOpsRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [serviceVersions, setServiceVersions] = useState<string>("No version data yet.");
   const [serviceReadiness, setServiceReadiness] = useState<string>("No readiness data yet.");
   const [quickMode, setQuickMode] = useState<QuickMode>("research");
@@ -539,6 +540,23 @@ export default function HomePage() {
     });
     setServiceReadiness(JSON.stringify(normalized, null, 2));
   }, [defaultHeaders]);
+
+  const refreshAllOpsPanels = useCallback(async () => {
+    setOpsRefreshState("refreshing");
+    try {
+      await Promise.all([
+        refreshServiceHealth(),
+        refreshServiceVersions(),
+        refreshServiceReadiness()
+      ]);
+      setOpsRefreshState("idle");
+    } catch {
+      setOpsRefreshState("failed");
+      window.setTimeout(() => {
+        setOpsRefreshState("idle");
+      }, 1800);
+    }
+  }, [refreshServiceHealth, refreshServiceReadiness, refreshServiceVersions]);
 
   const startTask = useCallback(async () => {
     setTaskEvents([]);
@@ -1371,6 +1389,13 @@ export default function HomePage() {
             <summary className={styles.drawerSummary}>Service Health</summary>
             <div className={styles.panel}>
               <div className={styles.inlineActions}>
+                <button className={`${styles.btn} ${styles.iconBtn}`} onClick={() => void refreshAllOpsPanels()}>
+                  {opsRefreshState === "refreshing"
+                    ? "Refreshing all…"
+                    : opsRefreshState === "failed"
+                      ? "Refresh failed"
+                      : "Refresh all ops"}
+                </button>
                 <button className={`${styles.btn} ${styles.iconBtn}`} onClick={refreshServiceHealth}>Refresh health</button>
                 <button className={`${styles.btn} ${styles.iconBtn}`} onClick={() => void copyServiceSnapshot()}>
                   {opsSnapshotCopyState === "copied"
