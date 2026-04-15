@@ -788,6 +788,12 @@
   margin-top: 2px;
 }
 
+.opsPanelMeta {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: #8ea1c8;
+}
+
 .telemetryCompareControls {
   display: grid;
   grid-template-columns: 1fr 1fr;
