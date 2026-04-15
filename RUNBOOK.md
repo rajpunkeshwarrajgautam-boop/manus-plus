@@ -40,6 +40,12 @@ If you use Docker instead of local Node, see `docker-compose.yml` and run `npm r
 - **File (default):** if **`DATABASE_URL`** is unset, task runs are stored in **`ORCHESTRATOR_STORE_PATH`** or, by default, **`services/orchestrator/.data/runs.json`** (relative to the orchestrator process cwd, usually the workspace package root).
 - **Postgres:** set **`DATABASE_URL`** (see `.env.example`). Apply schema: **`npm run migrate:deploy -w @manus-plus/orchestrator`**. **`GET /health`** includes **`"persistence": "file"`** or **`"postgres"`** in the JSON body. Idempotent **`POST /tasks`** replays are resolved against Postgres when the in-memory map is cold.
 
+### Local APIs with Postgres (optional)
+
+1. Start only Postgres: **`docker compose up -d postgres`** (from repo root; waits until healthy on **5432**).
+2. Apply schema once (or after migration changes): **`npm run migrate:deploy -w @manus-plus/orchestrator`** with the same **`DATABASE_URL`** as in `.env.example` (`postgresql://manus:manus@localhost:5432/manus`).
+3. In the same shell session as the APIs, export **`DATABASE_URL`** (PowerShell: **`$env:DATABASE_URL="postgresql://manus:manus@localhost:5432/manus"`**), then **`npm run dev:apis`** (or **`npm run smoke:services`**). Confirm **`GET http://localhost:4100/health`** shows **`"persistence":"postgres"`** and **`GET /readiness`** is **200**.
+
 ## Environment
 
 See `.env.example` at repo root. Copy the Next.js block into `apps/web/.env.local` for public URLs; use the Expo block in `apps/mobile/.env` on a device (LAN IP for hostnames).

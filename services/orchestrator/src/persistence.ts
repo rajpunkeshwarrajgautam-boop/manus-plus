@@ -132,3 +132,11 @@ export async function pingPostgres(): Promise<{ ok: boolean; detail?: string }> 
     return { ok: false, detail: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/** Close the Prisma pool (call on SIGTERM/SIGINT so Docker/K8s restarts do not leak connections). */
+export async function disconnectPersistence(): Promise<void> {
+  if (!prisma) return;
+  const client = prisma;
+  prisma = null;
+  await client.$disconnect();
+}

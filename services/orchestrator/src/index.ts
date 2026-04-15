@@ -7,7 +7,14 @@ import { routeModel } from "./model-router";
 import { scoreReliability } from "./reliability";
 import { emitMetric, metrics, summarizeMetrics } from "./telemetry";
 import { auditTrail, recordAudit } from "./audit";
-import { findRunByIdempotencyStored, loadRuns, persistRun, persistenceBackend, pingPostgres } from "./persistence";
+import {
+  disconnectPersistence,
+  findRunByIdempotencyStored,
+  loadRuns,
+  persistRun,
+  persistenceBackend,
+  pingPostgres
+} from "./persistence";
 import { withAuth } from "./auth";
 import { eventSchemas, OrchestratorEventName } from "./event-protocol";
 
@@ -449,9 +456,26 @@ async function bootstrap() {
   setPersistenceHook((run) => {
     void persistRun(run).catch(() => undefined);
   });
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`orchestrator listening on ${port}`);
   });
+
+  const shutdown = (signal: string) => {
+    console.log(`orchestrator ${signal}, shutting down…`);
+    const force = setTimeout(() => {
+      void disconnectPersistence()
+        .catch(() => undefined)
+        .finally(() => process.exit(0));
+    }, 10_000).unref();
+    server.close(() => {
+      clearTimeout(force);
+      void disconnectPersistence()
+        .catch(() => undefined)
+        .finally(() => process.exit(0));
+    });
+  };
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 void bootstrap();
