@@ -93,6 +93,30 @@ export default function HomePage() {
   const [telemetryCompareResult, setTelemetryCompareResult] = useState("Upload two telemetry snapshots to compare.");
   const seenRemoteEventsRef = useRef<Set<string>>(new Set());
   const [identityHydrated, setIdentityHydrated] = useState(false);
+  const [orchestratorStatus, setOrchestratorStatus] = useState<"checking" | "online" | "offline">("checking");
+
+  const probeOrchestrator = useCallback(async () => {
+    setOrchestratorStatus("checking");
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${ORCHESTRATOR_URL}/health`, {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        setOrchestratorStatus("offline");
+        return;
+      }
+      const data = (await response.json()) as { ok?: boolean };
+      setOrchestratorStatus(data.ok === true ? "online" : "offline");
+    } catch {
+      setOrchestratorStatus("offline");
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     const stored = loadIdentityFromStorage();
@@ -585,6 +609,14 @@ export default function HomePage() {
   }, [refreshSkills]);
 
   useEffect(() => {
+    void probeOrchestrator();
+    const interval = window.setInterval(() => {
+      void probeOrchestrator();
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, [probeOrchestrator]);
+
+  useEffect(() => {
     void refreshTaskList();
     const timer = setInterval(() => {
       void refreshTaskList();
@@ -654,6 +686,33 @@ export default function HomePage() {
         <div className={styles.brandWrap}>
           <div className={styles.brandDot} />
           <div className={styles.brand}>Manus Plus</div>
+        </div>
+        <div className={styles.backendStatus} aria-live="polite">
+          <div className={styles.backendLine}>
+            <span
+              className={`${styles.backendDot} ${
+                orchestratorStatus === "online"
+                  ? styles.backendDotOnline
+                  : orchestratorStatus === "offline"
+                    ? styles.backendDotOffline
+                    : styles.backendDotChecking
+              }`}
+              title="Orchestrator reachability"
+            />
+            <span className={styles.backendText}>
+              {orchestratorStatus === "online" && "Orchestrator reachable"}
+              {orchestratorStatus === "offline" && "Orchestrator unreachable"}
+              {orchestratorStatus === "checking" && "Checking orchestrator…"}
+            </span>
+            <button
+              type="button"
+              className={styles.backendRetry}
+              onClick={() => void probeOrchestrator()}
+            >
+              Retry
+            </button>
+          </div>
+          <div className={styles.backendUrl}>{ORCHESTRATOR_URL}</div>
         </div>
         <button className={styles.newTaskBtn} onClick={() => void startTask()}>Start new run</button>
         <div className={styles.navSection}>Workspace</div>

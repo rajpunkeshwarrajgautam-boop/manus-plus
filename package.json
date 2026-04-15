@@ -21,7 +21,7 @@
     "verify:error-codes": "node scripts/verify-error-codes.mjs",
     "verify:error-codes:runtime": "node scripts/smoke-error-codes.mjs",
     "verify:ops": "npm run verify:error-codes && npm run type-check && npm run ci:integration",
-    "verify:ops:local": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/preflight-local.ps1",
+    "verify:ops:local": "node ./scripts/preflight-local.mjs",
     "verify:ops:ci": "npm run verify:error-codes && npm run type-check && npm run migrate:deploy -w @manus-plus/orchestrator && npm run ci:integration",
     "ci:start:apis": "npm run dev:apis",
     "ci:start:web": "node scripts/wait-apis.mjs && npm run dev -w @manus-plus/web",

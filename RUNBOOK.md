@@ -32,6 +32,12 @@ Local deterministic preflight (cleans stale listeners on `3000` and `4100-4103`,
 npm run verify:ops:local
 ```
 
+Implementation is cross-platform (`scripts/preflight-local.mjs`). On **Windows** it uses PowerShell to find listeners; on **macOS/Linux** it uses `lsof` when available (install `lsof` if port cleanup is skipped with a warning). Port cleanup only:
+
+```bash
+node scripts/preflight-local.mjs --skip-verify-ops
+```
+
 Readiness semantics: `GET /readiness` returns **200** only when a service is ready to serve traffic, and **503** during startup/shutdown (or dependency failures such as Postgres connectivity in orchestrator Postgres mode). `GET /health` also includes a lifecycle `status` field (`starting`, `ready`, `shutting_down`) for dashboards/alerts.
 
 API services now emit one structured JSON access log per HTTP request (via shared `@manus-plus/observability` helpers), including propagated/generated `x-request-id`, method, path, status code, and duration in milliseconds. Clients can send `x-request-id` to correlate traces end-to-end; services echo it back in the response header. Sensitive values are redacted in logs (for example auth/cookie headers and secret-like query parameters such as `token`, `api_key`, and `password`).
