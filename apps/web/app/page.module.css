@@ -238,6 +238,54 @@
   max-width: 560px;
 }
 
+.mobileHealthStrip {
+  display: none;
+  max-width: 780px;
+  width: 100%;
+  margin: 0 auto 10px;
+  border: 1px solid #243049;
+  background: rgba(13, 20, 36, 0.8);
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+
+.mobileHealthTopRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mobileHealthText {
+  color: #c7d4ee;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mobileHealthRetry {
+  margin-left: auto;
+  border: 1px solid #2d3851;
+  background: #111a2b;
+  color: #e8eefc;
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mobileHealthRetry:hover {
+  background: #15223a;
+  border-color: #3b4e74;
+}
+
+.mobileServiceBadges {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
 .composer {
   border: 1px solid #24304a;
   background: #0d1322cc;
@@ -868,6 +916,10 @@
 
   .main {
     padding: 18px 14px 8px;
+  }
+
+  .mobileHealthStrip {
+    display: block;
   }
 
   .forge {
