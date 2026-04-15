@@ -1,6 +1,7 @@
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
+import { logAccess, resolveRequestId } from "@manus-plus/observability";
 import { z } from "zod";
 import { appendStep, checkpoint, createRun, findRunByIdempotency, hydrateRuns, runs, setPersistenceHook } from "./state-machine";
 import { routeModel } from "./model-router";
@@ -38,12 +39,29 @@ function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
 
 app.use(allowBrowserDev);
 app.use(express.json());
+app.use((req, res, next) => {
+  const requestId = resolveRequestId(req.headers["x-request-id"]);
+  const startedAt = Date.now();
+  res.setHeader("x-request-id", requestId);
+  res.on("finish", () => {
+    logAccess({
+      service: "orchestrator",
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      headers: req.headers
+    });
+  });
+  next();
+});
 app.use(withAuth);
 app.use((req, res, next) => {
   const actorId = req.auth?.actorId || "anonymous";
   const role = req.auth?.role || "user";
   if (req.path.startsWith("/ops") && role !== "admin") {
-    return res.status(403).json({ error: "Admin role required" });
+    return sendError(res, 403, "admin_role_required", "Admin role required");
   }
   recordAudit({
     actorId,
@@ -75,6 +93,16 @@ const versionInfo = {
   version: "0.1.0",
   apiVersion: "v1"
 };
+
+function sendError(
+  res: express.Response,
+  statusCode: number,
+  errorCode: string,
+  message: string,
+  extra: Record<string, unknown> = {}
+) {
+  return res.status(statusCode).json({ errorCode, error: message, ...extra });
+}
 
 function publish(res: express.Response, event: OrchestratorEventName, data: unknown) {
   const validated = eventSchemas[event].safeParse(data);
@@ -218,7 +246,7 @@ async function executeRun(taskId: string, res?: express.Response) {
 app.post("/tasks", async (req, res) => {
   const parsed = createTaskSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid task payload", issues: parsed.error.issues });
+    return sendError(res, 400, "invalid_task_payload", "Invalid task payload", { issues: parsed.error.issues });
   }
   const idempotencyKey = String(req.headers["idempotency-key"] || "");
   const workspaceId = req.auth!.workspaceId;
@@ -277,12 +305,12 @@ app.post("/tasks", async (req, res) => {
 app.post("/tasks/:id/resume", async (req, res) => {
   const resumeParsed = resumeSchema?.safeParse(req.body);
   if (resumeParsed && !resumeParsed.success) {
-    return res.status(400).json({ error: "Invalid resume payload", issues: resumeParsed.error.issues });
+    return sendError(res, 400, "invalid_resume_payload", "Invalid resume payload", { issues: resumeParsed.error.issues });
   }
   const run = runs.get(req.params.id);
-  if (!run) return res.status(404).json({ error: "Task not found" });
-  if (run.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
-  if (run.state === "completed") return res.status(409).json({ error: "Task already completed" });
+  if (!run) return sendError(res, 404, "task_not_found", "Task not found");
+  if (run.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
+  if (run.state === "completed") return sendError(res, 409, "task_already_completed", "Task already completed");
 
   const resumeReason = resumeParsed?.success ? resumeParsed.data?.reason : undefined;
   if (resumeReason) {
@@ -302,11 +330,11 @@ app.post("/tasks/:id/resume", async (req, res) => {
 app.post("/tasks/:id/cancel", (req, res) => {
   const cancelParsed = cancelSchema?.safeParse(req.body);
   if (cancelParsed && !cancelParsed.success) {
-    return res.status(400).json({ error: "Invalid cancel payload", issues: cancelParsed.error.issues });
+    return sendError(res, 400, "invalid_cancel_payload", "Invalid cancel payload", { issues: cancelParsed.error.issues });
   }
   const run = runs.get(req.params.id);
-  if (!run) return res.status(404).json({ error: "Task not found" });
-  if (run.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
+  if (!run) return sendError(res, 404, "task_not_found", "Task not found");
+  if (run.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   const cancelReason = cancelParsed?.success ? cancelParsed.data?.reason : undefined;
   appendStep(run, {
     phase: run.phase,
@@ -320,8 +348,8 @@ app.post("/tasks/:id/cancel", (req, res) => {
 
 app.get("/tasks/:id", (req, res) => {
   const run = runs.get(req.params.id);
-  if (!run) return res.status(404).json({ error: "Task not found" });
-  if (run.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
+  if (!run) return sendError(res, 404, "task_not_found", "Task not found");
+  if (run.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   return res.json({
     task: run,
     reliability: scoreReliability(run)
@@ -331,11 +359,11 @@ app.get("/tasks/:id", (req, res) => {
 app.get("/tasks/:id/export", (req, res) => {
   const query = exportQuerySchema.safeParse(req.query);
   if (!query.success) {
-    return res.status(400).json({ error: "Invalid export query", issues: query.error.issues });
+    return sendError(res, 400, "invalid_export_query", "Invalid export query", { issues: query.error.issues });
   }
   const run = runs.get(req.params.id);
-  if (!run) return res.status(404).json({ error: "Task not found" });
-  if (run.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
+  if (!run) return sendError(res, 404, "task_not_found", "Task not found");
+  if (run.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
 
   const format = query.data.format || "json";
   if (format === "json") {
@@ -373,7 +401,7 @@ app.get("/tasks/:id/export", (req, res) => {
 app.get("/tasks", (req, res) => {
   const query = listTasksQuerySchema.safeParse(req.query);
   if (!query.success) {
-    return res.status(400).json({ error: "Invalid query", issues: query.error.issues });
+    return sendError(res, 400, "invalid_query", "Invalid query", { issues: query.error.issues });
   }
   const workspaceId = req.auth!.workspaceId;
   let all = [...runs.values()].filter((run) => run.workspaceId === workspaceId);
@@ -416,8 +444,10 @@ app.get("/ops/audit", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
+  const status = isShuttingDown ? "shutting_down" : isReady ? "ready" : "starting";
   return res.json({
     ok: true,
+    status,
     service: "orchestrator",
     uptimeSec: Math.round(process.uptime()),
     runsInMemory: runs.size,
@@ -456,7 +486,7 @@ app.get("/readiness", async (_req, res) => {
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : "Unhandled orchestrator error";
-  return res.status(500).json({ error: message });
+  return sendError(res, 500, "internal_error", message);
 });
 
 const port = Number(process.env.PORT || 4100);

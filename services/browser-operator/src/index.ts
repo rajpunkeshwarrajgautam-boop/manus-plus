@@ -1,6 +1,7 @@
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
+import { logAccess, resolveRequestId } from "@manus-plus/observability";
 import { z } from "zod";
 import { withAuth } from "./auth";
 import { runBrowserAction } from "./runtime";
@@ -34,6 +35,23 @@ function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
 
 app.use(allowBrowserDev);
 app.use(express.json());
+app.use((req, res, next) => {
+  const requestId = resolveRequestId(req.headers["x-request-id"]);
+  const startedAt = Date.now();
+  res.setHeader("x-request-id", requestId);
+  res.on("finish", () => {
+    logAccess({
+      service: "browser-operator",
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      headers: req.headers
+    });
+  });
+  next();
+});
 app.use(withAuth);
 
 const createSessionSchema = z.object({
@@ -63,9 +81,19 @@ const versionInfo = {
   apiVersion: "v1"
 };
 
+function sendError(
+  res: express.Response,
+  statusCode: number,
+  errorCode: string,
+  message: string,
+  extra: Record<string, unknown> = {}
+) {
+  return res.status(statusCode).json({ errorCode, error: message, ...extra });
+}
+
 app.post("/sessions", (req, res) => {
   const parsed = createSessionSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
+  if (!parsed.success) return sendError(res, 400, "invalid_session_payload", "Invalid session payload", { issues: parsed.error.issues });
 
   const session: BrowserSession = {
     id: randomUUID(),
@@ -82,12 +110,12 @@ app.post("/sessions", (req, res) => {
 
 app.post("/sessions/:id/navigate", (req, res) => {
   const session = sessions.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-  if (session.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
-  if (session.state !== "active") return res.status(409).json({ error: "Session is not active" });
+  if (!session) return sendError(res, 404, "session_not_found", "Session not found");
+  if (session.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
+  if (session.state !== "active") return sendError(res, 409, "session_not_active", "Session is not active");
 
   const url = z.string().url().safeParse(req.body?.url);
-  if (!url.success) return res.status(400).json({ error: "Invalid URL" });
+  if (!url.success) return sendError(res, 400, "invalid_url", "Invalid URL");
 
   session.currentUrl = url.data;
   saveStore([...sessions.values()]).catch(() => undefined);
@@ -96,8 +124,8 @@ app.post("/sessions/:id/navigate", (req, res) => {
 
 app.post("/sessions/:id/takeover/request", (req, res) => {
   const session = sessions.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-  if (session.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
+  if (!session) return sendError(res, 404, "session_not_found", "Session not found");
+  if (session.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   session.state = "waiting_user";
   session.takeoverReason = String(req.body?.reason || "verification_required");
   saveStore([...sessions.values()]).catch(() => undefined);
@@ -106,8 +134,8 @@ app.post("/sessions/:id/takeover/request", (req, res) => {
 
 app.post("/sessions/:id/takeover/release", (req, res) => {
   const session = sessions.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-  if (session.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
+  if (!session) return sendError(res, 404, "session_not_found", "Session not found");
+  if (session.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   session.state = "active";
   session.takeoverReason = undefined;
   saveStore([...sessions.values()]).catch(() => undefined);
@@ -116,27 +144,29 @@ app.post("/sessions/:id/takeover/release", (req, res) => {
 
 app.get("/sessions/:id", (req, res) => {
   const session = sessions.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-  if (session.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
+  if (!session) return sendError(res, 404, "session_not_found", "Session not found");
+  if (session.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   res.json(session);
 });
 
 app.post("/sessions/:id/actions", async (req, res) => {
   const session = sessions.get(req.params.id);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-  if (session.workspaceId !== req.auth!.workspaceId) return res.status(403).json({ error: "Cross-workspace access denied" });
-  if (session.state !== "active") return res.status(409).json({ error: "Session is not active" });
+  if (!session) return sendError(res, 404, "session_not_found", "Session not found");
+  if (session.workspaceId !== req.auth!.workspaceId) return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
+  if (session.state !== "active") return sendError(res, 409, "session_not_active", "Session is not active");
 
   const payload = actionSchema.safeParse(req.body);
-  if (!payload.success) return res.status(400).json({ error: payload.error.issues });
+  if (!payload.success) return sendError(res, 400, "invalid_action_payload", "Invalid action payload", { issues: payload.error.issues });
 
   const result = await runBrowserAction(payload.data);
   res.json(result);
 });
 
 app.get("/health", (_req, res) => {
+  const status = isShuttingDown ? "shutting_down" : isReady ? "ready" : "starting";
   return res.json({
     ok: true,
+    status,
     service: "browser-operator",
     uptimeSec: Math.round(process.uptime()),
     activeSessions: sessions.size
@@ -192,7 +222,7 @@ async function bootstrap() {
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : "Unhandled browser-operator error";
-  return res.status(500).json({ error: message });
+  return sendError(res, 500, "internal_error", message);
 });
 
 void bootstrap();

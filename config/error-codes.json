@@ -1,0 +1,119 @@
+{
+  "codes": [
+    {
+      "code": "admin_role_required",
+      "httpStatus": 403,
+      "description": "Actor is authenticated but does not have admin privileges."
+    },
+    {
+      "code": "auth_headers_required",
+      "httpStatus": 401,
+      "description": "Required actor/workspace headers are missing."
+    },
+    {
+      "code": "cross_workspace_access_denied",
+      "httpStatus": 403,
+      "description": "The requested resource belongs to a different workspace."
+    },
+    {
+      "code": "instructions_required",
+      "httpStatus": 400,
+      "description": "Skill version payload is missing instructions."
+    },
+    {
+      "code": "internal_error",
+      "httpStatus": 500,
+      "description": "Unexpected server-side failure."
+    },
+    {
+      "code": "invalid_action_payload",
+      "httpStatus": 400,
+      "description": "Browser action request body does not match the expected schema."
+    },
+    {
+      "code": "invalid_cancel_payload",
+      "httpStatus": 400,
+      "description": "Task cancel request body does not match the expected schema."
+    },
+    {
+      "code": "invalid_export_query",
+      "httpStatus": 400,
+      "description": "Task export query string is malformed."
+    },
+    {
+      "code": "invalid_json",
+      "httpStatus": 400,
+      "description": "WebSocket message body is not valid JSON."
+    },
+    {
+      "code": "invalid_query",
+      "httpStatus": 400,
+      "description": "List query parameters are invalid."
+    },
+    {
+      "code": "invalid_resume_payload",
+      "httpStatus": 400,
+      "description": "Task resume request body does not match the expected schema."
+    },
+    {
+      "code": "invalid_session_payload",
+      "httpStatus": 400,
+      "description": "Browser session creation payload is invalid."
+    },
+    {
+      "code": "invalid_skill_payload",
+      "httpStatus": 400,
+      "description": "Skill creation payload is invalid."
+    },
+    {
+      "code": "invalid_task_payload",
+      "httpStatus": 400,
+      "description": "Task creation payload is invalid."
+    },
+    {
+      "code": "invalid_url",
+      "httpStatus": 400,
+      "description": "Provided URL failed validation."
+    },
+    {
+      "code": "not_found",
+      "httpStatus": 404,
+      "description": "HTTP endpoint does not exist."
+    },
+    {
+      "code": "session_not_active",
+      "httpStatus": 409,
+      "description": "Session exists but is not in active state."
+    },
+    {
+      "code": "session_not_found",
+      "httpStatus": 404,
+      "description": "Requested browser session does not exist."
+    },
+    {
+      "code": "skill_not_found",
+      "httpStatus": 404,
+      "description": "Requested skill does not exist."
+    },
+    {
+      "code": "skill_slug_conflict",
+      "httpStatus": 409,
+      "description": "Skill slug already exists for the workspace."
+    },
+    {
+      "code": "task_already_completed",
+      "httpStatus": 409,
+      "description": "Operation cannot be performed on a completed task."
+    },
+    {
+      "code": "task_not_found",
+      "httpStatus": 404,
+      "description": "Requested task does not exist."
+    },
+    {
+      "code": "workspace_id_required",
+      "httpStatus": 400,
+      "description": "workspaceId query parameter is required."
+    }
+  ]
+}
