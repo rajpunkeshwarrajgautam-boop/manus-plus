@@ -58,6 +58,7 @@ interface ServiceHealthBadge {
   status: ServiceStatus;
   latencyMs?: number;
   lastCheckedAt?: string;
+  lastErrorReason?: string;
 }
 const SERVICE_BADGE_DEFS: Array<Omit<ServiceHealthBadge, "status">> = [
   { key: "orchestrator", label: "Orchestrator", url: ORCHESTRATOR_URL },
@@ -71,6 +72,12 @@ function formatCheckedAt(ts?: string): string {
   const date = new Date(ts);
   if (Number.isNaN(date.valueOf())) return "-";
   return date.toLocaleTimeString();
+}
+
+function formatErrorReason(err: unknown): string {
+  if (err instanceof DOMException && err.name === "AbortError") return "timeout";
+  if (err instanceof Error) return err.message || err.name || "request failed";
+  return "request failed";
 }
 
 export default function HomePage() {
@@ -162,14 +169,16 @@ export default function HomePage() {
             key: service.key,
             status: response.ok ? ("online" as const) : ("offline" as const),
             latencyMs: Math.round(performance.now() - startedAt),
-            lastCheckedAt: checkedAt
+            lastCheckedAt: checkedAt,
+            lastErrorReason: response.ok ? undefined : `HTTP ${response.status}`
           };
-        } catch {
+        } catch (error) {
           return {
             key: service.key,
             status: "offline" as const,
             latencyMs: Math.round(performance.now() - startedAt),
-            lastCheckedAt: checkedAt
+            lastCheckedAt: checkedAt,
+            lastErrorReason: formatErrorReason(error)
           };
         } finally {
           window.clearTimeout(timeout);
@@ -178,21 +187,29 @@ export default function HomePage() {
     );
     const resultByKey = new Map<
       ServiceHealthBadge["key"],
-      Pick<ServiceHealthBadge, "status" | "latencyMs" | "lastCheckedAt">
+      Pick<ServiceHealthBadge, "status" | "latencyMs" | "lastCheckedAt" | "lastErrorReason">
     >();
     for (const probe of probes) {
       if (probe.status === "fulfilled") {
         resultByKey.set(probe.value.key, {
           status: probe.value.status,
           latencyMs: probe.value.latencyMs,
-          lastCheckedAt: probe.value.lastCheckedAt
+          lastCheckedAt: probe.value.lastCheckedAt,
+          lastErrorReason: probe.value.lastErrorReason
         });
       }
     }
     setServiceBadges((prev) =>
       prev.map((item) => {
         const next = resultByKey.get(item.key);
-        if (!next) return { ...item, status: "offline", lastCheckedAt: new Date().toISOString() };
+        if (!next) {
+          return {
+            ...item,
+            status: "offline",
+            lastCheckedAt: new Date().toISOString(),
+            lastErrorReason: "no probe result"
+          };
+        }
         return { ...item, ...next };
       })
     );
@@ -829,6 +846,7 @@ export default function HomePage() {
                 title={`${service.label} · ${service.url}`}
               >
                 {service.label} {service.latencyMs != null ? `${service.latencyMs}ms` : ""}
+                {service.status === "offline" && service.lastErrorReason ? ` · ${service.lastErrorReason}` : ""}
               </div>
             ))}
           </div>
@@ -951,6 +969,7 @@ export default function HomePage() {
                 title={`${service.label} · ${service.url}`}
               >
                 {service.label} {service.latencyMs != null ? `${service.latencyMs}ms` : ""}
+                {service.status === "offline" && service.lastErrorReason ? ` · ${service.lastErrorReason}` : ""}
               </div>
             ))}
           </div>
