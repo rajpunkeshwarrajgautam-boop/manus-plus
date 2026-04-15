@@ -50,6 +50,20 @@ interface TelemetrySnapshot {
   taskId?: string | null;
 }
 
+type ServiceStatus = "checking" | "online" | "offline";
+interface ServiceHealthBadge {
+  key: "orchestrator" | "browser-operator" | "skills-registry" | "realtime";
+  label: string;
+  url: string;
+  status: ServiceStatus;
+}
+const SERVICE_BADGE_DEFS: Array<Omit<ServiceHealthBadge, "status">> = [
+  { key: "orchestrator", label: "Orchestrator", url: ORCHESTRATOR_URL },
+  { key: "browser-operator", label: "Browser", url: BROWSER_URL },
+  { key: "skills-registry", label: "Skills", url: SKILLS_URL },
+  { key: "realtime", label: "Realtime", url: REALTIME_HTTP_URL }
+];
+
 export default function HomePage() {
   const [prompt, setPrompt] = useState("Research AI agent pricing and summarize GTM angles.");
   const [sessionId, setSessionId] = useState("session-main");
@@ -94,6 +108,9 @@ export default function HomePage() {
   const seenRemoteEventsRef = useRef<Set<string>>(new Set());
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [orchestratorStatus, setOrchestratorStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [serviceBadges, setServiceBadges] = useState<ServiceHealthBadge[]>(
+    SERVICE_BADGE_DEFS.map((service) => ({ ...service, status: "checking" }))
+  );
 
   const probeOrchestrator = useCallback(async () => {
     setOrchestratorStatus("checking");
@@ -116,6 +133,40 @@ export default function HomePage() {
     } finally {
       window.clearTimeout(timer);
     }
+  }, []);
+
+  const probeServiceBadges = useCallback(async () => {
+    setServiceBadges((prev) => prev.map((item) => ({ ...item, status: "checking" })));
+    const probes = await Promise.allSettled(
+      SERVICE_BADGE_DEFS.map(async (service) => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 4000);
+        try {
+          const response = await fetch(`${service.url}/health`, {
+            method: "GET",
+            cache: "no-store",
+            signal: controller.signal
+          });
+          return { key: service.key, status: response.ok ? ("online" as const) : ("offline" as const) };
+        } catch {
+          return { key: service.key, status: "offline" as const };
+        } finally {
+          window.clearTimeout(timeout);
+        }
+      })
+    );
+    const statusByKey = new Map<ServiceHealthBadge["key"], "online" | "offline">();
+    for (const probe of probes) {
+      if (probe.status === "fulfilled") {
+        statusByKey.set(probe.value.key, probe.value.status);
+      }
+    }
+    setServiceBadges((prev) =>
+      prev.map((item) => {
+        const nextStatus = statusByKey.get(item.key);
+        return { ...item, status: nextStatus ?? "offline" };
+      })
+    );
   }, []);
 
   useEffect(() => {
@@ -617,6 +668,14 @@ export default function HomePage() {
   }, [probeOrchestrator]);
 
   useEffect(() => {
+    void probeServiceBadges();
+    const interval = window.setInterval(() => {
+      void probeServiceBadges();
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [probeServiceBadges]);
+
+  useEffect(() => {
     void refreshTaskList();
     const timer = setInterval(() => {
       void refreshTaskList();
@@ -713,6 +772,23 @@ export default function HomePage() {
             </button>
           </div>
           <div className={styles.backendUrl}>{ORCHESTRATOR_URL}</div>
+          <div className={styles.serviceBadges}>
+            {serviceBadges.map((service) => (
+              <div
+                key={service.key}
+                className={`${styles.serviceBadge} ${
+                  service.status === "online"
+                    ? styles.serviceBadgeOnline
+                    : service.status === "offline"
+                      ? styles.serviceBadgeOffline
+                      : styles.serviceBadgeChecking
+                }`}
+                title={`${service.label} · ${service.url}`}
+              >
+                {service.label}
+              </div>
+            ))}
+          </div>
         </div>
         <button className={styles.newTaskBtn} onClick={() => void startTask()}>Start new run</button>
         <div className={styles.navSection}>Workspace</div>
