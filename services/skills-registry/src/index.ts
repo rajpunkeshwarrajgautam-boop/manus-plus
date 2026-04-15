@@ -1,6 +1,7 @@
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
+import { logAccess, resolveRequestId } from "@manus-plus/observability";
 import { z } from "zod";
 import { loadStore, saveStore } from "./persistence";
 
@@ -36,6 +37,23 @@ function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
 
 app.use(allowBrowserDev);
 app.use(express.json());
+app.use((req, res, next) => {
+  const requestId = resolveRequestId(req.headers["x-request-id"]);
+  const startedAt = Date.now();
+  res.setHeader("x-request-id", requestId);
+  res.on("finish", () => {
+    logAccess({
+      service: "skills-registry",
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      headers: req.headers
+    });
+  });
+  next();
+});
 const skills = new Map<string, Skill>();
 
 const createSkillSchema = z.object({
@@ -51,12 +69,22 @@ const versionInfo = {
   apiVersion: "v1"
 };
 
+function sendError(
+  res: express.Response,
+  statusCode: number,
+  errorCode: string,
+  message: string,
+  extra: Record<string, unknown> = {}
+) {
+  return res.status(statusCode).json({ errorCode, error: message, ...extra });
+}
+
 app.post("/skills", (req, res) => {
   const parsed = createSkillSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
+  if (!parsed.success) return sendError(res, 400, "invalid_skill_payload", "Invalid skill payload", { issues: parsed.error.issues });
 
   const existing = [...skills.values()].find((s) => s.workspaceId === parsed.data.workspaceId && s.slug === parsed.data.slug);
-  if (existing) return res.status(409).json({ error: "Skill slug already exists in workspace" });
+  if (existing) return sendError(res, 409, "skill_slug_conflict", "Skill slug already exists in workspace");
 
   const skill: Skill = {
     id: randomUUID(),
@@ -78,14 +106,14 @@ app.post("/skills", (req, res) => {
 
 app.post("/skills/:id/versions", (req, res) => {
   const skill = skills.get(req.params.id);
-  if (!skill) return res.status(404).json({ error: "Skill not found" });
+  if (!skill) return sendError(res, 404, "skill_not_found", "Skill not found");
   const workspaceId = z.string().min(1).safeParse(req.body?.workspaceId);
   if (!workspaceId.success || workspaceId.data !== skill.workspaceId) {
-    return res.status(403).json({ error: "Cross-workspace access denied" });
+    return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   }
 
   const instructions = z.string().min(10).safeParse(req.body?.instructions);
-  if (!instructions.success) return res.status(400).json({ error: "instructions required" });
+  if (!instructions.success) return sendError(res, 400, "instructions_required", "instructions required");
 
   const version: SkillVersion = {
     id: randomUUID(),
@@ -100,10 +128,10 @@ app.post("/skills/:id/versions", (req, res) => {
 
 app.post("/skills/:id/invoke", (req, res) => {
   const skill = skills.get(req.params.id);
-  if (!skill) return res.status(404).json({ error: "Skill not found" });
+  if (!skill) return sendError(res, 404, "skill_not_found", "Skill not found");
   const workspaceId = z.string().min(1).safeParse(req.body?.workspaceId);
   if (!workspaceId.success || workspaceId.data !== skill.workspaceId) {
-    return res.status(403).json({ error: "Cross-workspace access denied" });
+    return sendError(res, 403, "cross_workspace_access_denied", "Cross-workspace access denied");
   }
 
   const current = skill.versions[skill.versions.length - 1];
@@ -119,14 +147,16 @@ app.post("/skills/:id/invoke", (req, res) => {
 app.get("/skills", (_req, res) => {
   const workspaceId = String(_req.query.workspaceId || "");
   if (!workspaceId) {
-    return res.status(400).json({ error: "workspaceId query param is required" });
+    return sendError(res, 400, "workspace_id_required", "workspaceId query param is required");
   }
   res.json({ skills: [...skills.values()].filter((s) => s.workspaceId === workspaceId) });
 });
 
 app.get("/health", (_req, res) => {
+  const status = isShuttingDown ? "shutting_down" : isReady ? "ready" : "starting";
   return res.json({
     ok: true,
+    status,
     service: "skills-registry",
     uptimeSec: Math.round(process.uptime()),
     skillCount: skills.size
@@ -182,7 +212,7 @@ async function bootstrap() {
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : "Unhandled skills-registry error";
-  return res.status(500).json({ error: message });
+  return sendError(res, 500, "internal_error", message);
 });
 
 void bootstrap();

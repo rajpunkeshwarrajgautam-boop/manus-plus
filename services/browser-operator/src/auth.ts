@@ -15,7 +15,10 @@ export function withAuth(req: Request, res: Response, next: NextFunction) {
   const role = String(req.headers["x-role"] || "user") === "admin" ? "admin" : "user";
 
   if (!actorId || !workspaceId) {
-    return res.status(401).json({ error: "x-actor-id and x-workspace-id are required" });
+    return res.status(401).json({
+      errorCode: "auth_headers_required",
+      error: "x-actor-id and x-workspace-id are required"
+    });
   }
   req.auth = { actorId, workspaceId, role };
   next();

@@ -8,6 +8,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@manus-plus/observability": "*",
     "ws": "^8.18.3"
   },
   "devDependencies": {

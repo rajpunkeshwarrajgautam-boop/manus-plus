@@ -17,7 +17,18 @@ Health check (expects API processes running):
 npm run verify:health
 ```
 
-Readiness semantics: `GET /readiness` returns **200** only when a service is ready to serve traffic, and **503** during startup/shutdown (or dependency failures such as Postgres connectivity in orchestrator Postgres mode).
+Consolidated preflight:
+
+```bash
+# Local full reliability pass (static + integration runtime checks)
+npm run verify:ops
+```
+
+Readiness semantics: `GET /readiness` returns **200** only when a service is ready to serve traffic, and **503** during startup/shutdown (or dependency failures such as Postgres connectivity in orchestrator Postgres mode). `GET /health` also includes a lifecycle `status` field (`starting`, `ready`, `shutting_down`) for dashboards/alerts.
+
+API services now emit one structured JSON access log per HTTP request (via shared `@manus-plus/observability` helpers), including propagated/generated `x-request-id`, method, path, status code, and duration in milliseconds. Clients can send `x-request-id` to correlate traces end-to-end; services echo it back in the response header. Sensitive values are redacted in logs (for example auth/cookie headers and secret-like query parameters such as `token`, `api_key`, and `password`).
+
+Error responses in backend APIs now include a stable `errorCode` alongside `error` for 4xx/5xx outcomes, so dashboards and alerting can aggregate failure modes without relying on free-form message text.
 
 End-to-end smoke (orchestrator on **4100** only: `POST /tasks` SSE until `task_completed`, then `GET /tasks/:id` asserts `state === completed`):
 
@@ -29,7 +40,9 @@ Ports: orchestrator **4100**, browser-operator **4101**, realtime **4102** (HTTP
 
 ### CI (GitHub Actions)
 
-On push/PR to `main` or `master`, `.github/workflows/ci.yml` first validates Compose wiring with **`docker compose config`**, then runs **`npm ci`**, **`npm run type-check`**, **`npm run migrate:deploy -w @manus-plus/orchestrator`** (against a **Postgres 16** service), and **`npm run ci:integration`** (all four APIs + **Next.js dev** on **3000**, **`verify:health`**, **`e2e:smoke`**). CI sets **`DATABASE_URL`** so the orchestrator uses Postgres in that job.
+On push/PR to `main` or `master`, `.github/workflows/ci.yml` first validates Compose wiring with **`docker compose config`**, then runs **`npm ci`** and a single consolidated preflight command: **`npm run verify:ops:ci`**. That command runs **`verify:error-codes`**, **`type-check`**, **`migrate:deploy -w @manus-plus/orchestrator`** (against a **Postgres 16** service), and **`ci:integration`** (all four APIs + **Next.js dev** on **3000**, **`verify:health`**, **`verify:error-codes:runtime`**, **`e2e:smoke`**). CI sets **`DATABASE_URL`** so the orchestrator uses Postgres in that job.
+
+For easier troubleshooting, `ci:integration` is composed from smaller scripts: `ci:start:apis`, `ci:start:web`, and `ci:checks:runtime`.
 
 Locally, **`ci:integration`** still works **without** `DATABASE_URL` (orchestrator uses the JSON file store under `services/orchestrator/.data/runs.json`). Stop anything already bound to **4100–4103** and **3000** before running it, or you will get port conflicts.
 

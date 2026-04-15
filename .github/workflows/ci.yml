@@ -59,11 +59,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run type-check
-
-      - name: Prisma migrate (orchestrator)
-        run: npm run migrate:deploy -w @manus-plus/orchestrator
-
-      - name: Integration (APIs + Next dev + health + E2E smoke)
-        run: npm run ci:integration
+      - name: Verify ops preflight
+        run: npm run verify:ops:ci

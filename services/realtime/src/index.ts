@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { logAccess, resolveRequestId } from "@manus-plus/observability";
 import { WebSocket, WebSocketServer } from "ws";
 
 const versionInfo = {
@@ -19,17 +20,39 @@ const corsJsonHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, x-actor-id, x-workspace-id, x-role"
 } as const;
 
+function writeError(res: import("node:http").ServerResponse, statusCode: number, errorCode: string, message: string) {
+  res.writeHead(statusCode, corsJsonHeaders);
+  res.end(JSON.stringify({ errorCode, error: message }));
+}
+
 const server = createServer((req, res) => {
+  const requestId = resolveRequestId(req.headers["x-request-id"]);
+  const startedAt = Date.now();
+  const path = (req.url || "/").split("?")[0];
+  res.setHeader("x-request-id", requestId);
+  res.on("finish", () => {
+    logAccess({
+      service: "realtime",
+      requestId,
+      method: req.method || "GET",
+      path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      headers: req.headers
+    });
+  });
   if (req.method === "OPTIONS") {
     res.writeHead(204, corsJsonHeaders);
     res.end();
     return;
   }
   if (req.url === "/health") {
+    const status = isShuttingDown ? "shutting_down" : isReady ? "ready" : "starting";
     res.writeHead(200, corsJsonHeaders);
     res.end(
       JSON.stringify({
         ok: true,
+        status,
         service: "realtime",
         uptimeSec: Math.round(process.uptime()),
         activeRooms: taskRooms.size,
@@ -60,8 +83,7 @@ const server = createServer((req, res) => {
     );
     return;
   }
-  res.writeHead(404, corsJsonHeaders);
-  res.end(JSON.stringify({ error: "Not found" }));
+  writeError(res, 404, "not_found", "Not found");
 });
 const wss = new WebSocketServer({ server });
 const taskRooms = new Map<string, Set<WebSocket>>();
@@ -70,7 +92,14 @@ const socketRooms = new Map<WebSocket, Set<string>>();
 wss.on("connection", (socket) => {
   socket.on("message", (raw) => {
     messagesIn += 1;
-    const payload = JSON.parse(String(raw)) as { type: string; taskId?: string; body?: unknown };
+    let payload: { type: string; taskId?: string; body?: unknown };
+    try {
+      payload = JSON.parse(String(raw)) as { type: string; taskId?: string; body?: unknown };
+    } catch {
+      socket.send(JSON.stringify({ type: "error", errorCode: "invalid_json", error: "Invalid JSON payload" }));
+      messagesOut += 1;
+      return;
+    }
     if (payload.type === "join_task" && payload.taskId) {
       const room = taskRooms.get(payload.taskId) ?? new Set<WebSocket>();
       room.add(socket as WebSocket);
