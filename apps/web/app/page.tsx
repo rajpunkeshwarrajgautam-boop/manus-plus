@@ -127,6 +127,7 @@ export default function HomePage() {
   const [opsSnapshotCopyState, setOpsSnapshotCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [opsBundleCopyState, setOpsBundleCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [opsRefreshState, setOpsRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
+  const [runtimeConfigCopyState, setRuntimeConfigCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [serviceVersions, setServiceVersions] = useState<string>("No version data yet.");
   const [serviceReadiness, setServiceReadiness] = useState<string>("No readiness data yet.");
   const [quickMode, setQuickMode] = useState<QuickMode>("research");
@@ -389,6 +390,17 @@ export default function HomePage() {
       window.setTimeout(() => setOpsBundleCopyState("idle"), 1800);
     }
   }, [role, serviceBadges, serviceHealth, serviceReadiness, serviceVersions, workspaceId]);
+
+  const copyRuntimeConfig = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(runtimeConfig);
+      setRuntimeConfigCopyState("copied");
+      window.setTimeout(() => setRuntimeConfigCopyState("idle"), 1800);
+    } catch {
+      setRuntimeConfigCopyState("failed");
+      window.setTimeout(() => setRuntimeConfigCopyState("idle"), 1800);
+    }
+  }, [runtimeConfig]);
 
   const compareTelemetry = useCallback((a: TelemetrySnapshot, b: TelemetrySnapshot) => {
     const localDelta = (b.localEventCount || 0) - (a.localEventCount || 0);
@@ -1438,6 +1450,15 @@ export default function HomePage() {
           <details className={styles.drawerSection}>
             <summary className={styles.drawerSummary}>Runtime Config</summary>
             <div className={styles.panel}>
+              <div className={styles.inlineActions}>
+                <button className={`${styles.btn} ${styles.iconBtn}`} onClick={() => void copyRuntimeConfig()}>
+                  {runtimeConfigCopyState === "copied"
+                    ? "Copied config"
+                    : runtimeConfigCopyState === "failed"
+                      ? "Copy failed"
+                      : "Copy config"}
+                </button>
+              </div>
               <div className={styles.output}>{runtimeConfig}</div>
             </div>
           </details>
