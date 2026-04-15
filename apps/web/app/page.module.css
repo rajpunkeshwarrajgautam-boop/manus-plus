@@ -98,6 +98,43 @@
   word-break: break-all;
 }
 
+.serviceBadges {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.serviceBadge {
+  border: 1px solid #334868;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.serviceBadgeOnline {
+  background: rgba(20, 58, 45, 0.9);
+  border-color: #2d8a6f;
+  color: #bff5e0;
+}
+
+.serviceBadgeOffline {
+  background: rgba(66, 24, 30, 0.9);
+  border-color: #9a4b5b;
+  color: #ffd2dc;
+}
+
+.serviceBadgeChecking {
+  background: rgba(25, 35, 56, 0.9);
+  border-color: #46618f;
+  color: #cad9f6;
+}
+
 .backendRetry {
   margin-left: auto;
   border: 1px solid #2d3851;
