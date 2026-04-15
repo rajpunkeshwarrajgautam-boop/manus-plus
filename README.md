@@ -35,7 +35,7 @@ Full local flow, scripts, Docker option, and identity persistence are documented
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to `main` or `master`: `npm ci`, typecheck, then integration (`dev:apis` + health + E2E). After your first push, enable **branch protection** on `main` and require this workflow to pass.
+GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to `main` or `master`: `npm ci`, typecheck, then integration (APIs + **Next dev on 3000** + health + E2E). After your first push, enable **branch protection** on `main` and require this workflow to pass.
 
 ## Workspace layout
 
