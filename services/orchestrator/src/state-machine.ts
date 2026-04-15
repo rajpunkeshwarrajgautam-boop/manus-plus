@@ -28,10 +28,21 @@ export interface TaskRun {
 }
 
 export const runs = new Map<string, TaskRun>();
-let persistenceHook: (() => void) | null = null;
+let persistenceHook: ((run: TaskRun) => void | Promise<void>) | null = null;
 
-export function setPersistenceHook(hook: () => void) {
+export function setPersistenceHook(hook: ((run: TaskRun) => void | Promise<void>) | null) {
   persistenceHook = hook;
+}
+
+function notifyPersistence(run: TaskRun) {
+  try {
+    const r = persistenceHook?.(run);
+    if (r && typeof (r as Promise<unknown>).then === "function") {
+      void (r as Promise<unknown>).catch(() => undefined);
+    }
+  } catch {
+    // ignore hook failures
+  }
 }
 
 export function hydrateRuns(initialRuns: TaskRun[]) {
@@ -57,7 +68,7 @@ export function createRun(prompt: string, sessionId: string, workspaceId: string
     artifacts: []
   };
   runs.set(run.id, run);
-  persistenceHook?.();
+  notifyPersistence(run);
   return run;
 }
 
@@ -73,12 +84,11 @@ export function findRunByIdempotency(workspaceId: string, idempotencyKey: string
 export function appendStep(run: TaskRun, step: Omit<TaskStep, "id" | "createdAt">): TaskStep {
   const created: TaskStep = { ...step, id: randomUUID(), createdAt: new Date().toISOString() };
   run.steps.push(created);
-  persistenceHook?.();
+  notifyPersistence(run);
   return created;
 }
 
 export function checkpoint(run: TaskRun, name: string) {
   run.checkpoints.push(name);
   appendStep(run, { phase: run.phase, type: "checkpoint", content: `Checkpoint: ${name}` });
-  persistenceHook?.();
 }

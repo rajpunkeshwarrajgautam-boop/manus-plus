@@ -7,7 +7,7 @@ import { routeModel } from "./model-router";
 import { scoreReliability } from "./reliability";
 import { emitMetric, metrics, summarizeMetrics } from "./telemetry";
 import { auditTrail, recordAudit } from "./audit";
-import { loadRuns, saveRuns } from "./persistence";
+import { findRunByIdempotencyStored, loadRuns, persistRun, persistenceBackend, pingPostgres } from "./persistence";
 import { withAuth } from "./auth";
 import { eventSchemas, OrchestratorEventName } from "./event-protocol";
 
@@ -109,7 +109,7 @@ async function executeRun(taskId: string, res?: express.Response) {
   if (!run) return;
 
   run.state = "running";
-  saveRuns([...runs.values()]).catch(() => undefined);
+  void persistRun(run).catch(() => undefined);
   emitMetric("task_started", 1, { taskId });
   if (res) publish(res, "task_started", { taskId, state: run.state });
 
@@ -179,7 +179,7 @@ async function executeRun(taskId: string, res?: express.Response) {
     });
     const finalStep = appendStep(run, { phase: "finalize", type: "response", content: "Task completed successfully with quality gate pass." });
     run.state = "completed";
-    saveRuns([...runs.values()]).catch(() => undefined);
+    void persistRun(run).catch(() => undefined);
     emitMetric("task_completed", 1, { taskId, reliability: String(scoreReliability(run)) });
     emitMetric("task_cost_estimate", estimateTaskCost(run.steps.length, run.retryCount), { taskId, status: "completed" });
     if (res) {
@@ -198,7 +198,7 @@ async function executeRun(taskId: string, res?: express.Response) {
       return executeRun(taskId, res);
     }
     run.state = "failed";
-    saveRuns([...runs.values()]).catch(() => undefined);
+    void persistRun(run).catch(() => undefined);
     emitMetric("task_failed", 1, { taskId });
     emitMetric("task_cost_estimate", estimateTaskCost(run.steps.length, run.retryCount), { taskId, status: "failed" });
     if (res) publish(res, "task_failed", { taskId, state: run.state, reason: error instanceof Error ? error.message : "unknown" });
@@ -214,7 +214,14 @@ app.post("/tasks", async (req, res) => {
   const workspaceId = req.auth!.workspaceId;
   const actorId = req.auth!.actorId;
   if (idempotencyKey) {
-    const existing = findRunByIdempotency(workspaceId, idempotencyKey);
+    let existing = findRunByIdempotency(workspaceId, idempotencyKey);
+    if (!existing) {
+      const fromDb = await findRunByIdempotencyStored(workspaceId, idempotencyKey);
+      if (fromDb) {
+        hydrateRuns([fromDb]);
+        existing = findRunByIdempotency(workspaceId, idempotencyKey);
+      }
+    }
     if (existing) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -234,6 +241,7 @@ app.post("/tasks", async (req, res) => {
   const run = createRun(parsed.data.prompt, workspaceScopedSession, workspaceId, actorId, idempotencyKey || undefined);
   if (parsed.data.maxRetries) {
     run.maxRetries = parsed.data.maxRetries;
+    void persistRun(run).catch(() => undefined);
   }
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -277,7 +285,6 @@ app.post("/tasks/:id/resume", async (req, res) => {
   run.state = "running";
   run.phase = run.phase === "finalize" ? "verify" : run.phase;
   checkpoint(run, "manual_resume");
-  saveRuns([...runs.values()]).catch(() => undefined);
   await executeRun(run.id);
   return res.json({ ok: true, taskId: run.id, state: run.state, phase: run.phase });
 });
@@ -297,7 +304,7 @@ app.post("/tasks/:id/cancel", (req, res) => {
     content: `Task cancelled by ${req.auth!.actorId}${cancelReason ? `: ${cancelReason}` : ""}`
   });
   run.state = "cancelled";
-  saveRuns([...runs.values()]).catch(() => undefined);
+  void persistRun(run).catch(() => undefined);
   return res.json({ ok: true, taskId: run.id, state: run.state });
 });
 
@@ -403,7 +410,8 @@ app.get("/health", (_req, res) => {
     ok: true,
     service: "orchestrator",
     uptimeSec: Math.round(process.uptime()),
-    runsInMemory: runs.size
+    runsInMemory: runs.size,
+    persistence: persistenceBackend()
   });
 });
 
@@ -411,14 +419,22 @@ app.get("/version", (_req, res) => {
   return res.json(versionInfo);
 });
 
-app.get("/readiness", (_req, res) => {
-  return res.json({
-    ok: true,
-    checks: [
-      { name: "runs_store_loaded", status: "pass", details: `in_memory_runs=${runs.size}` },
-      { name: "event_protocol_initialized", status: "pass" }
-    ]
-  });
+app.get("/readiness", async (_req, res) => {
+  const checks: Array<{ name: string; status: string; details?: string }> = [
+    { name: "runs_store_loaded", status: "pass", details: `in_memory_runs=${runs.size}` },
+    { name: "event_protocol_initialized", status: "pass" },
+    { name: "persistence", status: "pass", details: persistenceBackend() }
+  ];
+  if (persistenceBackend() === "postgres") {
+    const db = await pingPostgres();
+    checks.push({
+      name: "postgres",
+      status: db.ok ? "pass" : "fail",
+      details: db.ok ? "connected" : db.detail
+    });
+  }
+  const ok = checks.every((c) => c.status === "pass");
+  return res.status(ok ? 200 : 503).json({ ok, checks });
 });
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -430,8 +446,8 @@ const port = Number(process.env.PORT || 4100);
 async function bootstrap() {
   const persisted = await loadRuns();
   hydrateRuns(persisted);
-  setPersistenceHook(() => {
-    saveRuns([...runs.values()]).catch(() => undefined);
+  setPersistenceHook((run) => {
+    void persistRun(run).catch(() => undefined);
   });
   app.listen(port, () => {
     console.log(`orchestrator listening on ${port}`);
