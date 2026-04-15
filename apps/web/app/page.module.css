@@ -912,6 +912,16 @@
   color: #99afd9;
 }
 
+.waitingUserBadge {
+  border: 1px solid #8f7a2d;
+  background: #3a3215;
+  color: #ffe8a3;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
 .taskStateDot {
   width: 6px;
   height: 6px;
@@ -932,6 +942,30 @@
   font-size: 0.71rem;
   color: #7f97c4;
   margin-top: 2px;
+}
+
+.taskCountsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.copyTaskIdBtn {
+  border: 1px solid #35527f;
+  background: #132845;
+  color: #d7e7ff;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.copyTaskIdBtn:hover {
+  border-color: #5b84c3;
+  background: #1a3760;
 }
 
 @keyframes fadeIn {

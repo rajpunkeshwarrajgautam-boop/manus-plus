@@ -106,6 +106,7 @@ export default function HomePage() {
   const [browserText, setBrowserText] = useState("hello");
   const [availableSkills, setAvailableSkills] = useState<Array<{ id: string; title: string; slug: string }>>([]);
   const [taskList, setTaskList] = useState<Array<{ id: string; state: string; phase?: string; prompt: string; steps?: number; artifacts?: number }>>([]);
+  const [copiedTaskId, setCopiedTaskId] = useState("");
   const [metricsSummary, setMetricsSummary] = useState<string>("No metrics yet.");
   const [taskFilterState, setTaskFilterState] = useState<"" | "queued" | "running" | "waiting_user" | "completed" | "failed" | "cancelled">("");
   const [taskFilterPhase, setTaskFilterPhase] = useState<"" | "plan" | "execute" | "verify" | "finalize">("");
@@ -295,6 +296,18 @@ export default function HomePage() {
     () => serviceBadges.filter((service) => service.status === "online").length,
     [serviceBadges]
   );
+
+  const copyTaskId = useCallback(async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedTaskId(id);
+      window.setTimeout(() => {
+        setCopiedTaskId((prev) => (prev === id ? "" : prev));
+      }, 1500);
+    } catch {
+      setCopiedTaskId("");
+    }
+  }, []);
 
   const compareTelemetry = useCallback((a: TelemetrySnapshot, b: TelemetrySnapshot) => {
     const localDelta = (b.localEventCount || 0) - (a.localEventCount || 0);
@@ -899,13 +912,28 @@ export default function HomePage() {
             >
               <div className={styles.taskMeta}>
                 <span className={styles.taskStateDot} />
-                {task.state} · {task.phase || "-"}
+                <span className={task.state === "waiting_user" ? styles.waitingUserBadge : ""}>
+                  {task.state}
+                </span>{" "}
+                · {task.phase || "-"}
               </div>
               <div className={styles.taskPrompt}>
                 {task.prompt}
               </div>
-              <div className={styles.taskCounts}>
+              <div className={styles.taskCountsRow}>
+                <div className={styles.taskCounts}>
                 steps {task.steps || 0} · artifacts {task.artifacts || 0}
+                </div>
+                <button
+                  type="button"
+                  className={styles.copyTaskIdBtn}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void copyTaskId(task.id);
+                  }}
+                >
+                  {copiedTaskId === task.id ? "Copied" : "Copy ID"}
+                </button>
               </div>
             </button>
           ))
