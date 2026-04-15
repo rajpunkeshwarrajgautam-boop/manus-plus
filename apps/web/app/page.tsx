@@ -273,6 +273,10 @@ export default function HomePage() {
     () => parsedEvents.filter((e) => e.source && e.source !== "web").length,
     [parsedEvents]
   );
+  const serviceOnlineCount = useMemo(
+    () => serviceBadges.filter((service) => service.status === "online").length,
+    [serviceBadges]
+  );
 
   const compareTelemetry = useCallback((a: TelemetrySnapshot, b: TelemetrySnapshot) => {
     const localDelta = (b.localEventCount || 0) - (a.localEventCount || 0);
@@ -804,6 +808,13 @@ export default function HomePage() {
             </button>
           </div>
           <div className={styles.backendUrl}>{ORCHESTRATOR_URL}</div>
+          <div
+            className={`${styles.healthSummary} ${
+              serviceOnlineCount === serviceBadges.length ? styles.healthSummaryOk : styles.healthSummaryWarn
+            }`}
+          >
+            Services online: {serviceOnlineCount}/{serviceBadges.length}
+          </div>
           <div className={styles.serviceBadges}>
             {serviceBadges.map((service) => (
               <div
@@ -942,6 +953,13 @@ export default function HomePage() {
                 {service.label} {service.latencyMs != null ? `${service.latencyMs}ms` : ""}
               </div>
             ))}
+          </div>
+          <div
+            className={`${styles.mobileHealthSummary} ${
+              serviceOnlineCount === serviceBadges.length ? styles.healthSummaryOk : styles.healthSummaryWarn
+            }`}
+          >
+            Services online: {serviceOnlineCount}/{serviceBadges.length}
           </div>
           <div className={styles.mobileCheckedAt}>
             Last check: {formatCheckedAt(serviceBadges.find((s) => s.key === "orchestrator")?.lastCheckedAt)}
