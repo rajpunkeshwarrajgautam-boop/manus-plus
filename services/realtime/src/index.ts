@@ -12,6 +12,17 @@ let messagesIn = 0;
 let messagesOut = 0;
 let isReady = false;
 let isShuttingDown = false;
+const reliabilityMetrics = {
+  errorResponsesTotal: 0,
+  readinessFailuresTotal: 0,
+  resetAt: new Date().toISOString()
+};
+
+function resetReliabilityMetrics() {
+  reliabilityMetrics.errorResponsesTotal = 0;
+  reliabilityMetrics.readinessFailuresTotal = 0;
+  reliabilityMetrics.resetAt = new Date().toISOString();
+}
 
 const corsJsonHeaders = {
   "Content-Type": "application/json",
@@ -21,6 +32,9 @@ const corsJsonHeaders = {
 } as const;
 
 function writeError(res: import("node:http").ServerResponse, statusCode: number, errorCode: string, message: string) {
+  if (statusCode >= 400) {
+    reliabilityMetrics.errorResponsesTotal += 1;
+  }
   res.writeHead(statusCode, corsJsonHeaders);
   res.end(JSON.stringify({ errorCode, error: message }));
 }
@@ -58,9 +72,23 @@ const server = createServer((req, res) => {
         activeRooms: taskRooms.size,
         activeSockets: socketRooms.size,
         messagesIn,
-        messagesOut
+        messagesOut,
+        errorResponsesTotal: reliabilityMetrics.errorResponsesTotal,
+        readinessFailuresTotal: reliabilityMetrics.readinessFailuresTotal,
+        reliabilityMetricsResetAt: reliabilityMetrics.resetAt
       })
     );
+    return;
+  }
+  if (req.url === "/ops/reliability") {
+    res.writeHead(200, corsJsonHeaders);
+    res.end(JSON.stringify({ reliability: reliabilityMetrics }));
+    return;
+  }
+  if (req.url === "/ops/reliability/reset" && req.method === "POST") {
+    resetReliabilityMetrics();
+    res.writeHead(200, corsJsonHeaders);
+    res.end(JSON.stringify({ ok: true, reliability: reliabilityMetrics }));
     return;
   }
   if (req.url === "/version") {
@@ -74,6 +102,9 @@ const server = createServer((req, res) => {
       { name: "ws_server_initialized", status: "pass" }
     ];
     const ok = checks.every((check) => check.status === "pass");
+    if (!ok) {
+      reliabilityMetrics.readinessFailuresTotal += 1;
+    }
     res.writeHead(ok ? 200 : 503, corsJsonHeaders);
     res.end(
       JSON.stringify({
