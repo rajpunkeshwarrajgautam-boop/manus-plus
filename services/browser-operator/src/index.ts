@@ -161,14 +161,25 @@ async function bootstrap() {
   for (const item of saved) {
     sessions.set(item.id, item);
   }
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`browser-operator listening on ${port}`);
   });
-}
 
-void bootstrap();
+  const shutdown = (signal: string) => {
+    console.log(`browser-operator ${signal}, shutting down…`);
+    const force = setTimeout(() => process.exit(0), 10_000).unref();
+    server.close(() => {
+      clearTimeout(force);
+      process.exit(0);
+    });
+  };
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+}
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : "Unhandled browser-operator error";
   return res.status(500).json({ error: message });
 });
+
+void bootstrap();

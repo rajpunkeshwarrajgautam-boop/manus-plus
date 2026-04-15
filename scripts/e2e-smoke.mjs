@@ -10,6 +10,7 @@
  *   ORCHESTRATOR_URL (default http://localhost:4100)
  *   E2E_ACTOR_ID, E2E_WORKSPACE_ID (defaults: e2e-actor, e2e-workspace)
  *   E2E_TIMEOUT_MS (default 90000)
+ *   When DATABASE_URL is set (e.g. CI), GET /health must report persistence=postgres.
  */
 import { randomUUID } from "node:crypto";
 import http from "node:http";
@@ -159,12 +160,22 @@ function postTasksStream(base, bodyObj) {
 }
 
 async function main() {
+  const base = ORCH.replace(/\/$/, "");
+
+  if (process.env.DATABASE_URL?.trim()) {
+    const h = await requestJson("GET", `${base}/health`, {});
+    if (!h.ok || h.json?.persistence !== "postgres") {
+      console.error("[e2e] With DATABASE_URL, expected GET /health ok and persistence=postgres", h.json);
+      process.exit(1);
+    }
+    console.log("[e2e] orchestrator persistence=postgres");
+  }
+
   const sessionId = `e2e-${randomUUID()}`;
   const prompt =
     process.env.E2E_PROMPT ||
     "E2E smoke: summarize what a minimal task run should validate (quality gate, steps, completion).";
 
-  const base = ORCH.replace(/\/$/, "");
   console.log(`[e2e] POST ${base}/tasks sessionId=${sessionId}`);
 
   const postRes = await postTasksStream(base, { prompt, sessionId, maxRetries: 5 });

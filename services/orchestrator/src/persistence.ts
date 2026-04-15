@@ -8,6 +8,9 @@ import { runs } from "./state-machine";
 const storagePath = process.env.ORCHESTRATOR_STORE_PATH || join(process.cwd(), ".data", "runs.json");
 const usePostgres = Boolean(process.env.DATABASE_URL?.trim());
 
+/** Terminal runs safe to drop after retention window (never delete active work). */
+const TERMINAL_RUN_STATES = ["completed", "failed", "cancelled"] as const;
+
 let prisma: PrismaClient | null = null;
 
 function getClient(): PrismaClient {
@@ -96,6 +99,27 @@ export async function persistRun(run: TaskRun): Promise<void> {
   }
   await mkdir(dirname(storagePath), { recursive: true });
   await writeFile(storagePath, JSON.stringify([...runs.values()], null, 2), "utf8");
+}
+
+/**
+ * When `ORCHESTRATOR_RETENTION_DAYS` is a positive integer and Postgres is enabled,
+ * deletes terminal runs older than that many days so the table and hydrate cap stay bounded.
+ */
+export async function pruneTerminalRunsByRetention(): Promise<number> {
+  if (!usePostgres) return 0;
+  const raw = process.env.ORCHESTRATOR_RETENTION_DAYS?.trim();
+  if (!raw) return 0;
+  const days = Number.parseInt(raw, 10);
+  if (!Number.isFinite(days) || days <= 0) return 0;
+
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+  const result = await getClient().orchestratorTaskRun.deleteMany({
+    where: {
+      state: { in: [...TERMINAL_RUN_STATES] },
+      updatedAt: { lt: cutoff }
+    }
+  });
+  return result.count;
 }
 
 export async function loadRuns(): Promise<TaskRun[]> {

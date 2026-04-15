@@ -80,6 +80,30 @@ async function main() {
     results.push(await ping(name, base));
   }
 
+  const expectPostgresOrchestrator = Boolean(process.env.DATABASE_URL?.trim());
+  if (expectPostgresOrchestrator) {
+    const orch = results.find((r) => r.name === "orchestrator");
+    if (!orch?.ok) {
+      console.error("✗ orchestrator health failed; cannot assert persistence=postgres");
+      process.exit(1);
+    }
+    try {
+      const full = await httpGet(`${ORCH.replace(/\/$/, "")}/health`, { maxBody: 2048 });
+      const j = JSON.parse(full.body);
+      if (j.persistence !== "postgres") {
+        console.error(
+          `✗ orchestrator /health: expected persistence "postgres" when DATABASE_URL is set, got:`,
+          j.persistence
+        );
+        process.exit(1);
+      }
+      console.log(`✓ orchestrator persistence=postgres (DATABASE_URL set)`);
+    } catch (e) {
+      console.error("✗ orchestrator /health JSON check failed:", e);
+      process.exit(1);
+    }
+  }
+
   let webOk = false;
   try {
     const w = await httpGet(WEB, { maxBody: 200 });

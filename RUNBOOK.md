@@ -39,6 +39,7 @@ If you use Docker instead of local Node, see `docker-compose.yml` and run `npm r
 
 - **File (default):** if **`DATABASE_URL`** is unset, task runs are stored in **`ORCHESTRATOR_STORE_PATH`** or, by default, **`services/orchestrator/.data/runs.json`** (relative to the orchestrator process cwd, usually the workspace package root).
 - **Postgres:** set **`DATABASE_URL`** (see `.env.example`). Apply schema: **`npm run migrate:deploy -w @manus-plus/orchestrator`**. **`GET /health`** includes **`"persistence": "file"`** or **`"postgres"`** in the JSON body. Idempotent **`POST /tasks`** replays are resolved against Postgres when the in-memory map is cold.
+- **Retention (Postgres):** optional **`ORCHESTRATOR_RETENTION_DAYS`** (positive integer). On startup, terminal runs (**`completed`**, **`failed`**, **`cancelled`**) older than that many days are deleted so storage stays bounded. Active runs (**`queued`**, **`running`**, **`waiting_user`**) are never removed.
 
 ### Local APIs with Postgres (optional)
 

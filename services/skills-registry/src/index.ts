@@ -151,14 +151,25 @@ async function bootstrap() {
   for (const skill of saved) {
     skills.set(skill.id, skill);
   }
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`skills-registry listening on ${port}`);
   });
-}
 
-void bootstrap();
+  const shutdown = (signal: string) => {
+    console.log(`skills-registry ${signal}, shutting down…`);
+    const force = setTimeout(() => process.exit(0), 10_000).unref();
+    server.close(() => {
+      clearTimeout(force);
+      process.exit(0);
+    });
+  };
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+}
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : "Unhandled skills-registry error";
   return res.status(500).json({ error: message });
 });
+
+void bootstrap();
