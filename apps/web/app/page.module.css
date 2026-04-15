@@ -182,6 +182,22 @@
   border-color: #3b4e74;
 }
 
+.backendAutoToggle {
+  border: 1px solid #2d3851;
+  background: #111a2b;
+  color: #cfe0ff;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.backendAutoToggle:hover {
+  background: #15223a;
+  border-color: #3b4e74;
+}
+
 .newTaskBtn {
   width: 100%;
   border: 1px solid #2d3851;
