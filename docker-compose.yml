@@ -26,6 +26,11 @@ services:
     environment:
       PORT: "4100"
       DATABASE_URL: postgresql://manus:manus@postgres:5432/manus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4100/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +45,11 @@ services:
       - "4102:4102"
     environment:
       PORT: "4102"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4102/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   browser-operator:
     build:
@@ -51,6 +61,11 @@ services:
       - "4101:4101"
     environment:
       PORT: "4101"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4101/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   skills-registry:
     build:
@@ -62,6 +77,11 @@ services:
       - "4103:4103"
     environment:
       PORT: "4103"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4103/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   web:
     build:
@@ -77,11 +97,20 @@ services:
       NEXT_PUBLIC_BROWSER_OPERATOR_URL: http://localhost:4101
       NEXT_PUBLIC_REALTIME_URL: ws://localhost:4102
       NEXT_PUBLIC_SKILLS_REGISTRY_URL: http://localhost:4103
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
-      - orchestrator
-      - realtime
-      - browser-operator
-      - skills-registry
+      orchestrator:
+        condition: service_healthy
+      realtime:
+        condition: service_healthy
+      browser-operator:
+        condition: service_healthy
+      skills-registry:
+        condition: service_healthy
 
 volumes:
   manus_pgdata: {}
