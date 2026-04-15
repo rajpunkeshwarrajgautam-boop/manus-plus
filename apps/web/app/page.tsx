@@ -56,6 +56,8 @@ interface ServiceHealthBadge {
   label: string;
   url: string;
   status: ServiceStatus;
+  latencyMs?: number;
+  lastCheckedAt?: string;
 }
 const SERVICE_BADGE_DEFS: Array<Omit<ServiceHealthBadge, "status">> = [
   { key: "orchestrator", label: "Orchestrator", url: ORCHESTRATOR_URL },
@@ -63,6 +65,13 @@ const SERVICE_BADGE_DEFS: Array<Omit<ServiceHealthBadge, "status">> = [
   { key: "skills-registry", label: "Skills", url: SKILLS_URL },
   { key: "realtime", label: "Realtime", url: REALTIME_HTTP_URL }
 ];
+
+function formatCheckedAt(ts?: string): string {
+  if (!ts) return "-";
+  const date = new Date(ts);
+  if (Number.isNaN(date.valueOf())) return "-";
+  return date.toLocaleTimeString();
+}
 
 export default function HomePage() {
   const [prompt, setPrompt] = useState("Research AI agent pricing and summarize GTM angles.");
@@ -141,30 +150,50 @@ export default function HomePage() {
       SERVICE_BADGE_DEFS.map(async (service) => {
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 4000);
+        const startedAt = performance.now();
+        const checkedAt = new Date().toISOString();
         try {
           const response = await fetch(`${service.url}/health`, {
             method: "GET",
             cache: "no-store",
             signal: controller.signal
           });
-          return { key: service.key, status: response.ok ? ("online" as const) : ("offline" as const) };
+          return {
+            key: service.key,
+            status: response.ok ? ("online" as const) : ("offline" as const),
+            latencyMs: Math.round(performance.now() - startedAt),
+            lastCheckedAt: checkedAt
+          };
         } catch {
-          return { key: service.key, status: "offline" as const };
+          return {
+            key: service.key,
+            status: "offline" as const,
+            latencyMs: Math.round(performance.now() - startedAt),
+            lastCheckedAt: checkedAt
+          };
         } finally {
           window.clearTimeout(timeout);
         }
       })
     );
-    const statusByKey = new Map<ServiceHealthBadge["key"], "online" | "offline">();
+    const resultByKey = new Map<
+      ServiceHealthBadge["key"],
+      Pick<ServiceHealthBadge, "status" | "latencyMs" | "lastCheckedAt">
+    >();
     for (const probe of probes) {
       if (probe.status === "fulfilled") {
-        statusByKey.set(probe.value.key, probe.value.status);
+        resultByKey.set(probe.value.key, {
+          status: probe.value.status,
+          latencyMs: probe.value.latencyMs,
+          lastCheckedAt: probe.value.lastCheckedAt
+        });
       }
     }
     setServiceBadges((prev) =>
       prev.map((item) => {
-        const nextStatus = statusByKey.get(item.key);
-        return { ...item, status: nextStatus ?? "offline" };
+        const next = resultByKey.get(item.key);
+        if (!next) return { ...item, status: "offline", lastCheckedAt: new Date().toISOString() };
+        return { ...item, ...next };
       })
     );
   }, []);
@@ -766,7 +795,10 @@ export default function HomePage() {
             <button
               type="button"
               className={styles.backendRetry}
-              onClick={() => void probeOrchestrator()}
+              onClick={() => {
+                void probeOrchestrator();
+                void probeServiceBadges();
+              }}
             >
               Retry
             </button>
@@ -785,9 +817,12 @@ export default function HomePage() {
                 }`}
                 title={`${service.label} · ${service.url}`}
               >
-                {service.label}
+                {service.label} {service.latencyMs != null ? `${service.latencyMs}ms` : ""}
               </div>
             ))}
+          </div>
+          <div className={styles.backendCheckedAt}>
+            Last check: {formatCheckedAt(serviceBadges.find((s) => s.key === "orchestrator")?.lastCheckedAt)}
           </div>
         </div>
         <button className={styles.newTaskBtn} onClick={() => void startTask()}>Start new run</button>
@@ -904,9 +939,12 @@ export default function HomePage() {
                 }`}
                 title={`${service.label} · ${service.url}`}
               >
-                {service.label}
+                {service.label} {service.latencyMs != null ? `${service.latencyMs}ms` : ""}
               </div>
             ))}
+          </div>
+          <div className={styles.mobileCheckedAt}>
+            Last check: {formatCheckedAt(serviceBadges.find((s) => s.key === "orchestrator")?.lastCheckedAt)}
           </div>
         </div>
         <div className={styles.quickActions}>
