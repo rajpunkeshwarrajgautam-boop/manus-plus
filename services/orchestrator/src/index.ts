@@ -1,4 +1,5 @@
 import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { appendStep, checkpoint, createRun, findRunByIdempotency, hydrateRuns, runs, setPersistenceHook } from "./state-machine";
@@ -11,6 +12,21 @@ import { withAuth } from "./auth";
 import { eventSchemas, OrchestratorEventName } from "./event-protocol";
 
 const app = express();
+
+function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Idempotency-Key, idempotency-key, x-actor-id, x-workspace-id, x-role"
+  );
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+}
+
+app.use(allowBrowserDev);
 app.use(express.json());
 app.use(withAuth);
 app.use((req, res, next) => {
@@ -223,8 +239,21 @@ app.post("/tasks", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  await executeRun(run.id, res);
-  res.end();
+  try {
+    await executeRun(run.id, res);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "internal_error";
+    console.error("[orchestrator] executeRun failed", error);
+    try {
+      publish(res, "task_failed", { taskId: run.id, state: "failed", reason: msg });
+    } catch {
+      // ignore secondary failures while closing the stream
+    }
+  } finally {
+    if (!res.writableEnded) {
+      res.end();
+    }
+  }
 });
 
 app.post("/tasks/:id/resume", async (req, res) => {

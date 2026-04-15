@@ -10,9 +10,21 @@ const versionInfo = {
 let messagesIn = 0;
 let messagesOut = 0;
 
+const corsJsonHeaders = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-actor-id, x-workspace-id, x-role"
+} as const;
+
 const server = createServer((req, res) => {
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, corsJsonHeaders);
+    res.end();
+    return;
+  }
   if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, corsJsonHeaders);
     res.end(
       JSON.stringify({
         ok: true,
@@ -27,12 +39,12 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.url === "/version") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, corsJsonHeaders);
     res.end(JSON.stringify(versionInfo));
     return;
   }
   if (req.url === "/readiness") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, corsJsonHeaders);
     res.end(
       JSON.stringify({
         ok: true,
@@ -43,7 +55,7 @@ const server = createServer((req, res) => {
     );
     return;
   }
-  res.writeHead(404, { "Content-Type": "application/json" });
+  res.writeHead(404, corsJsonHeaders);
   res.end(JSON.stringify({ error: "Not found" }));
 });
 const wss = new WebSocketServer({ server });

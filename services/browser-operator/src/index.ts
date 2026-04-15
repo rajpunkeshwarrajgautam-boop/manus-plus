@@ -1,4 +1,5 @@
 import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { withAuth } from "./auth";
@@ -18,6 +19,18 @@ interface BrowserSession {
 
 const sessions = new Map<string, BrowserSession>();
 const app = express();
+
+function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-actor-id, x-workspace-id, x-role");
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+}
+
+app.use(allowBrowserDev);
 app.use(express.json());
 app.use(withAuth);
 

@@ -250,6 +250,77 @@ export default function HomePage() {
     setTelemetryCompareResult("Upload two telemetry snapshots to compare.");
   }, []);
 
+  const refreshSkills = useCallback(async () => {
+    const response = await fetch(`${SKILLS_URL}/skills?workspaceId=${encodeURIComponent(workspaceId)}`);
+    const data = await response.json();
+    setAvailableSkills(Array.isArray(data.skills) ? data.skills : []);
+  }, [workspaceId]);
+
+  const refreshTaskList = useCallback(async () => {
+    const search = new URLSearchParams();
+    search.set("limit", "12");
+    if (taskFilterState) search.set("state", taskFilterState);
+    if (taskFilterPhase) search.set("phase", taskFilterPhase);
+    const response = await fetch(`${ORCHESTRATOR_URL}/tasks?${search.toString()}`, {
+      headers: defaultHeaders
+    });
+    const data = await response.json();
+    setTaskList(Array.isArray(data.tasks) ? data.tasks : []);
+  }, [defaultHeaders, taskFilterPhase, taskFilterState]);
+
+  const refreshMetricsSummary = useCallback(async () => {
+    const response = await fetch(`${ORCHESTRATOR_URL}/ops/metrics-summary`, {
+      headers: defaultHeaders
+    });
+    const data = await response.json();
+    setMetricsSummary(JSON.stringify(data, null, 2));
+  }, [defaultHeaders]);
+
+  const refreshServiceHealth = useCallback(async () => {
+    const checks = await Promise.allSettled([
+      fetch(`${ORCHESTRATOR_URL}/health`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${BROWSER_URL}/health`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${SKILLS_URL}/health`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${REALTIME_HTTP_URL}/health`).then((r) => r.json())
+    ]);
+    const normalized = checks.map((check, idx) => {
+      const name = idx === 0 ? "orchestrator" : idx === 1 ? "browser-operator" : idx === 2 ? "skills-registry" : "realtime";
+      if (check.status === "fulfilled") return { service: name, ok: true, ...check.value };
+      return { service: name, ok: false, error: "unreachable" };
+    });
+    setServiceHealth(JSON.stringify(normalized, null, 2));
+  }, [defaultHeaders]);
+
+  const refreshServiceVersions = useCallback(async () => {
+    const checks = await Promise.allSettled([
+      fetch(`${ORCHESTRATOR_URL}/version`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${BROWSER_URL}/version`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${SKILLS_URL}/version`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${REALTIME_HTTP_URL}/version`).then((r) => r.json())
+    ]);
+    const normalized = checks.map((check, idx) => {
+      const name = idx === 0 ? "orchestrator" : idx === 1 ? "browser-operator" : idx === 2 ? "skills-registry" : "realtime";
+      if (check.status === "fulfilled") return { service: name, ok: true, ...check.value };
+      return { service: name, ok: false, error: "unreachable" };
+    });
+    setServiceVersions(JSON.stringify(normalized, null, 2));
+  }, [defaultHeaders]);
+
+  const refreshServiceReadiness = useCallback(async () => {
+    const checks = await Promise.allSettled([
+      fetch(`${ORCHESTRATOR_URL}/readiness`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${BROWSER_URL}/readiness`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${SKILLS_URL}/readiness`, { headers: defaultHeaders }).then((r) => r.json()),
+      fetch(`${REALTIME_HTTP_URL}/readiness`).then((r) => r.json())
+    ]);
+    const normalized = checks.map((check, idx) => {
+      const name = idx === 0 ? "orchestrator" : idx === 1 ? "browser-operator" : idx === 2 ? "skills-registry" : "realtime";
+      if (check.status === "fulfilled") return { service: name, ok: true, ...check.value };
+      return { service: name, ok: false, error: "unreachable" };
+    });
+    setServiceReadiness(JSON.stringify(normalized, null, 2));
+  }, [defaultHeaders]);
+
   const startTask = useCallback(async () => {
     setTaskEvents([]);
     setParsedEvents([]);
@@ -257,93 +328,118 @@ export default function HomePage() {
     seenRemoteEventsRef.current.clear();
     setArtifacts([]);
     setIsTaskStreaming(true);
-    const response = await fetch(`${ORCHESTRATOR_URL}/tasks`, {
-      method: "POST",
-      headers: { ...defaultHeaders, "idempotency-key": `${workspaceId}:${sessionId}:${idempotencySeed}` },
-      body: JSON.stringify({ prompt: `[${quickMode}] ${prompt}`, sessionId, maxRetries })
-    });
-    if (!response.ok || !response.body) {
-      setTaskEvents([`task_failed: HTTP ${response.status}`]);
-      setIsTaskStreaming(false);
-      return;
-    }
+    try {
+      const response = await fetch(`${ORCHESTRATOR_URL}/tasks`, {
+        method: "POST",
+        headers: { ...defaultHeaders, "idempotency-key": `${workspaceId}:${sessionId}:${idempotencySeed}` },
+        body: JSON.stringify({ prompt: `[${quickMode}] ${prompt}`, sessionId, maxRetries })
+      });
+      if (!response.ok || !response.body) {
+        const errText = await response.text().catch(() => "");
+        setTaskEvents([`task_failed: HTTP ${response.status}${errText ? ` — ${errText}` : ""}`]);
+        setParsedEvents((prev) => [...prev, { event: "task_failed", text: `HTTP ${response.status}`, source: "web" }]);
+        return;
+      }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const chunks = buffer.split("\n\n");
-      buffer = chunks.pop() || "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() || "";
 
-      for (const chunk of chunks) {
-        const lines = chunk.split("\n");
-        const eventLine = lines.find((l) => l.startsWith("event: "));
-        const dataLine = lines.find((l) => l.startsWith("data: "));
-        const eventName = eventLine ? eventLine.slice(7) : "unknown";
-        const dataRaw = dataLine ? dataLine.slice(6) : "{}";
-        let parsed: StepEvent = {};
-        try {
-          parsed = JSON.parse(dataRaw) as StepEvent;
-        } catch {
-          parsed = { content: dataRaw };
-        }
-        if (eventName === "task_started" && parsed.taskId) {
-          setTaskId(String(parsed.taskId));
-        }
-        if (eventName === "artifact_created") {
-          setArtifacts((prev) => [
-            ...prev,
-            {
-              title: typeof parsed.content === "string" ? parsed.content : "Generated Artifact",
-              kind: "report",
-              content: JSON.stringify(parsed)
+        for (const chunk of chunks) {
+          const lines = chunk.split("\n");
+          const eventLine = lines.find((l) => l.startsWith("event: "));
+          const dataLine = lines.find((l) => l.startsWith("data: "));
+          const eventName = eventLine ? eventLine.slice(7) : "unknown";
+          const dataRaw = dataLine ? dataLine.slice(6) : "{}";
+          let parsed: StepEvent = {};
+          try {
+            parsed = JSON.parse(dataRaw) as StepEvent;
+          } catch {
+            parsed = { content: dataRaw };
+          }
+          if (eventName === "task_started" && parsed.taskId) {
+            setTaskId(String(parsed.taskId));
+          }
+          if (eventName === "artifact_created") {
+            setArtifacts((prev) => [
+              ...prev,
+              {
+                title: typeof parsed.content === "string" ? parsed.content : "Generated Artifact",
+                kind: "report",
+                content: JSON.stringify(parsed)
+              }
+            ]);
+          }
+          const contentText = (() => {
+            if (eventName === "quality_gate") {
+              return `attempt ${parsed.attempt} score ${parsed.score}/100 passed=${parsed.passed} reason=${parsed.reason}`;
             }
-          ]);
-        }
-        const contentText = (() => {
-          if (eventName === "quality_gate") {
-            return `attempt ${parsed.attempt} score ${parsed.score}/100 passed=${parsed.passed} reason=${parsed.reason}`;
+            if (eventName === "task_retrying") {
+              return `retry ${parsed.retryCount} reason=${parsed.reason || "unknown"}`;
+            }
+            if (eventName === "task_failed") {
+              return parsed.reason || parsed.content || "Task failed";
+            }
+            if (eventName === "task_completed") {
+              return `completed reliability=${parsed.reliability}`;
+            }
+            return parsed.content || JSON.stringify(parsed);
+          })();
+          const line = `${eventName}: ${contentText}`;
+          setTaskEvents((prev) => [...prev, line]);
+          setParsedEvents((prev) => [...prev, { event: eventName, text: contentText, source: "web" }]);
+          const effectiveTaskId = parsed.taskId || taskId;
+          if (collabSocket && collabSocket.readyState === WebSocket.OPEN && effectiveTaskId) {
+            collabSocket.send(JSON.stringify({
+              type: "task_event",
+              taskId: effectiveTaskId,
+              body: { event: eventName, content: parsed.content || parsed, origin: "web" }
+            }));
           }
-          if (eventName === "task_retrying") {
-            return `retry ${parsed.retryCount} reason=${parsed.reason || "unknown"}`;
-          }
-          if (eventName === "task_failed") {
-            return parsed.reason || parsed.content || "Task failed";
-          }
-          if (eventName === "task_completed") {
-            return `completed reliability=${parsed.reliability}`;
-          }
-          return parsed.content || JSON.stringify(parsed);
-        })();
-        const line = `${eventName}: ${contentText}`;
-        setTaskEvents((prev) => [...prev, line]);
-        setParsedEvents((prev) => [...prev, { event: eventName, text: contentText, source: "web" }]);
-        const effectiveTaskId = parsed.taskId || taskId;
-        if (collabSocket && collabSocket.readyState === WebSocket.OPEN && effectiveTaskId) {
-          collabSocket.send(JSON.stringify({
-            type: "task_event",
-            taskId: effectiveTaskId,
-            body: { event: eventName, content: parsed.content || parsed, origin: "web" }
-          }));
         }
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setTaskEvents((prev) => [...prev, `task_failed: ${msg}`]);
+      setParsedEvents((prev) => [...prev, { event: "task_failed", text: msg, source: "web" }]);
+    } finally {
+      setIsTaskStreaming(false);
     }
-    setIsTaskStreaming(false);
   }, [collabSocket, defaultHeaders, idempotencySeed, maxRetries, prompt, quickMode, sessionId, taskId, workspaceId]);
 
   async function createBrowserSession() {
-    const response = await fetch(`${BROWSER_URL}/sessions`, {
-      method: "POST",
-      headers: defaultHeaders,
-      body: JSON.stringify({ taskId: taskId || "manual-task", startUrl: "https://example.com" })
-    });
-    const data = await response.json();
-    setBrowserSessionId(data.id || "");
-    setBrowserOutput(JSON.stringify(data, null, 2));
+    try {
+      const response = await fetch(`${BROWSER_URL}/sessions`, {
+        method: "POST",
+        headers: defaultHeaders,
+        body: JSON.stringify({ taskId: taskId || "manual-task", startUrl: browserUrl || "https://example.com" })
+      });
+      const raw = await response.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(raw) as { id?: string };
+      } catch {
+        data = { raw };
+      }
+      if (!response.ok) {
+        setBrowserSessionId("");
+        setBrowserOutput(`Create session failed (${response.status}): ${raw}`);
+        return;
+      }
+      const obj = data as { id?: string };
+      setBrowserSessionId(obj.id || "");
+      setBrowserOutput(JSON.stringify(data, null, 2));
+    } catch (e) {
+      setBrowserSessionId("");
+      setBrowserOutput(e instanceof Error ? e.message : "Network error creating browser session");
+    }
   }
 
   async function browserTakeoverRequest() {
@@ -367,17 +463,32 @@ export default function HomePage() {
 
   async function browserGoto() {
     if (!browserSessionId) return;
-    const payload = (() => {
-      if (browserAction === "goto") return { action: "goto", url: browserUrl };
-      if (browserAction === "click") return { action: "click", url: browserUrl, selector: browserSelector };
-      return { action: "type", url: browserUrl, selector: browserSelector, text: browserText };
-    })();
-    const response = await fetch(`${BROWSER_URL}/sessions/${browserSessionId}/actions`, {
-      method: "POST",
-      headers: defaultHeaders,
-      body: JSON.stringify(payload)
-    });
-    setBrowserOutput(JSON.stringify(await response.json(), null, 2));
+    try {
+      const payload = (() => {
+        if (browserAction === "goto") return { action: "goto", url: browserUrl };
+        if (browserAction === "click") return { action: "click", url: browserUrl, selector: browserSelector };
+        return { action: "type", url: browserUrl, selector: browserSelector, text: browserText };
+      })();
+      const response = await fetch(`${BROWSER_URL}/sessions/${browserSessionId}/actions`, {
+        method: "POST",
+        headers: defaultHeaders,
+        body: JSON.stringify(payload)
+      });
+      const raw = await response.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = { raw };
+      }
+      if (!response.ok) {
+        setBrowserOutput(`Action failed (${response.status}): ${raw}`);
+        return;
+      }
+      setBrowserOutput(JSON.stringify(data, null, 2));
+    } catch (e) {
+      setBrowserOutput(e instanceof Error ? e.message : "Network error running browser action");
+    }
   }
 
   async function createSkill() {
@@ -406,24 +517,6 @@ export default function HomePage() {
       body: JSON.stringify({ workspaceId, payload: { sector: "ai-productivity", region: "global" } })
     });
     setSkillOutput(JSON.stringify(await response.json(), null, 2));
-  }
-
-  async function refreshSkills() {
-    const response = await fetch(`${SKILLS_URL}/skills?workspaceId=${encodeURIComponent(workspaceId)}`);
-    const data = await response.json();
-    setAvailableSkills(Array.isArray(data.skills) ? data.skills : []);
-  }
-
-  async function refreshTaskList() {
-    const search = new URLSearchParams();
-    search.set("limit", "12");
-    if (taskFilterState) search.set("state", taskFilterState);
-    if (taskFilterPhase) search.set("phase", taskFilterPhase);
-    const response = await fetch(`${ORCHESTRATOR_URL}/tasks?${search.toString()}`, {
-      headers: defaultHeaders
-    });
-    const data = await response.json();
-    setTaskList(Array.isArray(data.tasks) ? data.tasks : []);
   }
 
   async function loadTaskDetails(targetTaskId: string) {
@@ -468,59 +561,6 @@ export default function HomePage() {
     setTaskExportPreview(payload);
   }
 
-  async function refreshMetricsSummary() {
-    const response = await fetch(`${ORCHESTRATOR_URL}/ops/metrics-summary`, {
-      headers: defaultHeaders
-    });
-    const data = await response.json();
-    setMetricsSummary(JSON.stringify(data, null, 2));
-  }
-
-  async function refreshServiceHealth() {
-    const checks = await Promise.allSettled([
-      fetch(`${ORCHESTRATOR_URL}/health`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${BROWSER_URL}/health`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${SKILLS_URL}/health`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${REALTIME_HTTP_URL}/health`).then((r) => r.json())
-    ]);
-    const normalized = checks.map((check, idx) => {
-      const name = idx === 0 ? "orchestrator" : idx === 1 ? "browser-operator" : idx === 2 ? "skills-registry" : "realtime";
-      if (check.status === "fulfilled") return { service: name, ok: true, ...check.value };
-      return { service: name, ok: false, error: "unreachable" };
-    });
-    setServiceHealth(JSON.stringify(normalized, null, 2));
-  }
-
-  async function refreshServiceVersions() {
-    const checks = await Promise.allSettled([
-      fetch(`${ORCHESTRATOR_URL}/version`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${BROWSER_URL}/version`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${SKILLS_URL}/version`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${REALTIME_HTTP_URL}/version`).then((r) => r.json())
-    ]);
-    const normalized = checks.map((check, idx) => {
-      const name = idx === 0 ? "orchestrator" : idx === 1 ? "browser-operator" : idx === 2 ? "skills-registry" : "realtime";
-      if (check.status === "fulfilled") return { service: name, ok: true, ...check.value };
-      return { service: name, ok: false, error: "unreachable" };
-    });
-    setServiceVersions(JSON.stringify(normalized, null, 2));
-  }
-
-  async function refreshServiceReadiness() {
-    const checks = await Promise.allSettled([
-      fetch(`${ORCHESTRATOR_URL}/readiness`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${BROWSER_URL}/readiness`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${SKILLS_URL}/readiness`, { headers: defaultHeaders }).then((r) => r.json()),
-      fetch(`${REALTIME_HTTP_URL}/readiness`).then((r) => r.json())
-    ]);
-    const normalized = checks.map((check, idx) => {
-      const name = idx === 0 ? "orchestrator" : idx === 1 ? "browser-operator" : idx === 2 ? "skills-registry" : "realtime";
-      if (check.status === "fulfilled") return { service: name, ok: true, ...check.value };
-      return { service: name, ok: false, error: "unreachable" };
-    });
-    setServiceReadiness(JSON.stringify(normalized, null, 2));
-  }
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -542,7 +582,7 @@ export default function HomePage() {
 
   useEffect(() => {
     void refreshSkills();
-  }, [workspaceId]);
+  }, [refreshSkills]);
 
   useEffect(() => {
     void refreshTaskList();
@@ -550,7 +590,7 @@ export default function HomePage() {
       void refreshTaskList();
     }, 5000);
     return () => clearInterval(timer);
-  }, [workspaceId, role, actorId, taskFilterState, taskFilterPhase]);
+  }, [refreshTaskList]);
 
   useEffect(() => {
     if (role !== "admin") return;
@@ -558,7 +598,7 @@ export default function HomePage() {
     void refreshServiceHealth();
     void refreshServiceVersions();
     void refreshServiceReadiness();
-  }, [role, actorId, workspaceId]);
+  }, [role, refreshMetricsSummary, refreshServiceHealth, refreshServiceVersions, refreshServiceReadiness]);
 
   useEffect(() => {
     if (!taskId) return;
