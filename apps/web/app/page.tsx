@@ -80,6 +80,18 @@ function formatErrorReason(err: unknown): string {
   return "request failed";
 }
 
+function parseOpsPanelJson(raw: string): unknown {
+  const trimmed = raw.trim();
+  if (!trimmed || /^No .+ yet\.?$/i.test(trimmed)) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return { _unparsed: true, raw };
+  }
+}
+
 export default function HomePage() {
   const [prompt, setPrompt] = useState("Research AI agent pricing and summarize GTM angles.");
   const [sessionId, setSessionId] = useState("session-main");
@@ -113,6 +125,7 @@ export default function HomePage() {
   const [diagnostics, setDiagnostics] = useState<string>("No diagnostics yet.");
   const [serviceHealth, setServiceHealth] = useState<string>("No health data yet.");
   const [opsSnapshotCopyState, setOpsSnapshotCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [opsBundleCopyState, setOpsBundleCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [serviceVersions, setServiceVersions] = useState<string>("No version data yet.");
   const [serviceReadiness, setServiceReadiness] = useState<string>("No readiness data yet.");
   const [quickMode, setQuickMode] = useState<QuickMode>("research");
@@ -339,6 +352,42 @@ export default function HomePage() {
       }, 1800);
     }
   }, [role, serviceBadges, workspaceId]);
+
+  const copyOpsBundle = useCallback(async () => {
+    const bundle = {
+      generatedAt: new Date().toISOString(),
+      client: "web",
+      workspaceId,
+      role,
+      endpoints: {
+        orchestrator: ORCHESTRATOR_URL,
+        browserOperator: BROWSER_URL,
+        skillsRegistry: SKILLS_URL,
+        realtimeWs: REALTIME_URL,
+        realtimeHttp: REALTIME_HTTP_URL
+      },
+      uiProbes: serviceBadges.map((service) => ({
+        key: service.key,
+        label: service.label,
+        url: service.url,
+        status: service.status,
+        latencyMs: service.latencyMs ?? null,
+        lastCheckedAt: service.lastCheckedAt ?? null,
+        lastErrorReason: service.lastErrorReason ?? null
+      })),
+      health: parseOpsPanelJson(serviceHealth),
+      versions: parseOpsPanelJson(serviceVersions),
+      readiness: parseOpsPanelJson(serviceReadiness)
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+      setOpsBundleCopyState("copied");
+      window.setTimeout(() => setOpsBundleCopyState("idle"), 1800);
+    } catch {
+      setOpsBundleCopyState("failed");
+      window.setTimeout(() => setOpsBundleCopyState("idle"), 1800);
+    }
+  }, [role, serviceBadges, serviceHealth, serviceReadiness, serviceVersions, workspaceId]);
 
   const compareTelemetry = useCallback((a: TelemetrySnapshot, b: TelemetrySnapshot) => {
     const localDelta = (b.localEventCount || 0) - (a.localEventCount || 0);
@@ -1329,6 +1378,13 @@ export default function HomePage() {
                     : opsSnapshotCopyState === "failed"
                       ? "Copy failed"
                       : "Copy snapshot"}
+                </button>
+                <button className={`${styles.btn} ${styles.iconBtn}`} onClick={() => void copyOpsBundle()}>
+                  {opsBundleCopyState === "copied"
+                    ? "Copied bundle"
+                    : opsBundleCopyState === "failed"
+                      ? "Bundle failed"
+                      : "Copy ops bundle"}
                 </button>
               </div>
               <div className={styles.output}>{serviceHealth}</div>
