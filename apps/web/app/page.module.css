@@ -98,6 +98,28 @@
   word-break: break-all;
 }
 
+.healthSummary {
+  margin-top: 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  width: fit-content;
+}
+
+.healthSummaryOk {
+  background: rgba(20, 58, 45, 0.85);
+  border-color: #2d8a6f;
+  color: #bff5e0;
+}
+
+.healthSummaryWarn {
+  background: rgba(66, 24, 30, 0.85);
+  border-color: #9a4b5b;
+  color: #ffd2dc;
+}
+
 .serviceBadges {
   margin-top: 8px;
   display: grid;
@@ -296,6 +318,10 @@
   margin-top: 8px;
   color: #8ea1c8;
   font-size: 0.68rem;
+}
+
+.mobileHealthSummary {
+  margin-top: 8px;
 }
 
 .composer {
