@@ -863,6 +863,52 @@ export default function HomePage() {
       <section className={styles.main}>
         <h1 className={styles.title}>What do you want to build today?</h1>
         <p className={styles.subtitle}>Autonomous execution with live planning, actions, and verification.</p>
+        <div className={styles.mobileHealthStrip} aria-live="polite">
+          <div className={styles.mobileHealthTopRow}>
+            <span
+              className={`${styles.backendDot} ${
+                orchestratorStatus === "online"
+                  ? styles.backendDotOnline
+                  : orchestratorStatus === "offline"
+                    ? styles.backendDotOffline
+                    : styles.backendDotChecking
+              }`}
+              title="Orchestrator reachability"
+            />
+            <span className={styles.mobileHealthText}>
+              {orchestratorStatus === "online" && "Orchestrator reachable"}
+              {orchestratorStatus === "offline" && "Orchestrator unreachable"}
+              {orchestratorStatus === "checking" && "Checking orchestrator…"}
+            </span>
+            <button
+              type="button"
+              className={styles.mobileHealthRetry}
+              onClick={() => {
+                void probeOrchestrator();
+                void probeServiceBadges();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+          <div className={styles.mobileServiceBadges}>
+            {serviceBadges.map((service) => (
+              <div
+                key={`mobile-${service.key}`}
+                className={`${styles.serviceBadge} ${
+                  service.status === "online"
+                    ? styles.serviceBadgeOnline
+                    : service.status === "offline"
+                      ? styles.serviceBadgeOffline
+                      : styles.serviceBadgeChecking
+                }`}
+                title={`${service.label} · ${service.url}`}
+              >
+                {service.label}
+              </div>
+            ))}
+          </div>
+        </div>
         <div className={styles.quickActions}>
           {quickActions.map((action) => (
             <button
