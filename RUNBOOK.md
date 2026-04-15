@@ -17,6 +17,8 @@ Health check (expects API processes running):
 npm run verify:health
 ```
 
+Readiness semantics: `GET /readiness` returns **200** only when a service is ready to serve traffic, and **503** during startup/shutdown (or dependency failures such as Postgres connectivity in orchestrator Postgres mode).
+
 End-to-end smoke (orchestrator on **4100** only: `POST /tasks` SSE until `task_completed`, then `GET /tasks/:id` asserts `state === completed`):
 
 ```bash

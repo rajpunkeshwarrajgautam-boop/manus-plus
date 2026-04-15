@@ -20,6 +20,8 @@ import { withAuth } from "./auth";
 import { eventSchemas, OrchestratorEventName } from "./event-protocol";
 
 const app = express();
+let isReady = false;
+let isShuttingDown = false;
 
 function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -428,7 +430,14 @@ app.get("/version", (_req, res) => {
 });
 
 app.get("/readiness", async (_req, res) => {
+  if (isShuttingDown) {
+    return res.status(503).json({
+      ok: false,
+      checks: [{ name: "lifecycle", status: "fail", details: "shutting_down" }]
+    });
+  }
   const checks: Array<{ name: string; status: string; details?: string }> = [
+    { name: "lifecycle", status: isReady ? "pass" : "fail", details: isReady ? "ready" : "starting" },
     { name: "runs_store_loaded", status: "pass", details: `in_memory_runs=${runs.size}` },
     { name: "event_protocol_initialized", status: "pass" },
     { name: "persistence", status: "pass", details: persistenceBackend() }
@@ -462,11 +471,14 @@ async function bootstrap() {
     void persistRun(run).catch(() => undefined);
   });
   const server = app.listen(port, () => {
+    isReady = true;
     console.log(`orchestrator listening on ${port}`);
   });
 
   const shutdown = (signal: string) => {
     console.log(`orchestrator ${signal}, shutting down…`);
+    isShuttingDown = true;
+    isReady = false;
     const force = setTimeout(() => {
       void disconnectPersistence()
         .catch(() => undefined)

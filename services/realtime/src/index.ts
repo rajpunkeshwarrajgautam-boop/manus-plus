@@ -9,6 +9,8 @@ const versionInfo = {
 
 let messagesIn = 0;
 let messagesOut = 0;
+let isReady = false;
+let isShuttingDown = false;
 
 const corsJsonHeaders = {
   "Content-Type": "application/json",
@@ -44,13 +46,16 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.url === "/readiness") {
-    res.writeHead(200, corsJsonHeaders);
+    const checks = [
+      { name: "lifecycle", status: isReady && !isShuttingDown ? "pass" : "fail", details: isShuttingDown ? "shutting_down" : isReady ? "ready" : "starting" },
+      { name: "ws_server_initialized", status: "pass" }
+    ];
+    const ok = checks.every((check) => check.status === "pass");
+    res.writeHead(ok ? 200 : 503, corsJsonHeaders);
     res.end(
       JSON.stringify({
-        ok: true,
-        checks: [
-          { name: "ws_server_initialized", status: "pass" }
-        ]
+        ok,
+        checks
       })
     );
     return;
@@ -101,11 +106,14 @@ wss.on("connection", (socket) => {
 
 const port = Number(process.env.PORT || 4102);
 server.listen(port, () => {
+  isReady = true;
   console.log(`realtime service listening on ${port}`);
 });
 
 const shutdown = (signal: string) => {
   console.log(`realtime ${signal}, shutting down…`);
+  isShuttingDown = true;
+  isReady = false;
   const force = setTimeout(() => process.exit(0), 10_000).unref();
   wss.close((err) => {
     clearTimeout(force);
