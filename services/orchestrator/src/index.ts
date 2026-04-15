@@ -13,7 +13,8 @@ import {
   loadRuns,
   persistRun,
   persistenceBackend,
-  pingPostgres
+  pingPostgres,
+  pruneTerminalRunsByRetention
 } from "./persistence";
 import { withAuth } from "./auth";
 import { eventSchemas, OrchestratorEventName } from "./event-protocol";
@@ -451,6 +452,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 const port = Number(process.env.PORT || 4100);
 async function bootstrap() {
+  const pruned = await pruneTerminalRunsByRetention();
+  if (pruned > 0) {
+    console.log(`orchestrator: retention pruned ${pruned} terminal task run(s)`);
+  }
   const persisted = await loadRuns();
   hydrateRuns(persisted);
   setPersistenceHook((run) => {
