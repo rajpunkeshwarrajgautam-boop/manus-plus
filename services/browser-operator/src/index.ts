@@ -105,6 +105,13 @@ function sendError(
   return res.status(statusCode).json({ errorCode, error: message, ...extra });
 }
 
+app.use((req, res, next) => {
+  if (req.path.startsWith("/ops") && req.auth?.role !== "admin") {
+    return sendError(res, 403, "admin_role_required", "Admin role required");
+  }
+  next();
+});
+
 app.post("/sessions", (req, res) => {
   const parsed = createSessionSchema.safeParse(req.body);
   if (!parsed.success) return sendError(res, 400, "invalid_session_payload", "Invalid session payload", { issues: parsed.error.issues });

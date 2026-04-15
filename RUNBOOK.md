@@ -30,7 +30,7 @@ API services now emit one structured JSON access log per HTTP request (via share
 
 Error responses in backend APIs now include a stable `errorCode` alongside `error` for 4xx/5xx outcomes, so dashboards and alerting can aggregate failure modes without relying on free-form message text.
 
-`GET /health` now also includes lightweight reliability counters: `errorResponsesTotal` and `readinessFailuresTotal`, plus `reliabilityMetricsResetAt`. Operators can inspect the raw counters at `GET /ops/reliability` and reset them via `POST /ops/reliability/reset` to create rolling-window monitoring periods.
+`GET /health` now also includes lightweight reliability counters: `errorResponsesTotal` and `readinessFailuresTotal`, plus `reliabilityMetricsResetAt`. Operators can inspect the raw counters at `GET /ops/reliability` and reset them via `POST /ops/reliability/reset` to create rolling-window monitoring periods. Those `/ops/reliability` endpoints require **`x-role: admin`** (and, where the service uses auth middleware, the usual actor/workspace headers). This matches other `/ops/*` routes on the orchestrator.
 
 End-to-end smoke (orchestrator on **4100** only: `POST /tasks` SSE until `task_completed`, then `GET /tasks/:id` asserts `state === completed`):
 

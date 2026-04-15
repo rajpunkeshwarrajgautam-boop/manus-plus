@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { logAccess, resolveRequestId } from "@manus-plus/observability";
 import { WebSocket, WebSocketServer } from "ws";
 
@@ -22,6 +22,10 @@ function resetReliabilityMetrics() {
   reliabilityMetrics.errorResponsesTotal = 0;
   reliabilityMetrics.readinessFailuresTotal = 0;
   reliabilityMetrics.resetAt = new Date().toISOString();
+}
+
+function isAdminRole(req: IncomingMessage): boolean {
+  return String(req.headers["x-role"] ?? "user") === "admin";
 }
 
 const corsJsonHeaders = {
@@ -81,11 +85,19 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.url === "/ops/reliability") {
+    if (!isAdminRole(req)) {
+      writeError(res, 403, "admin_role_required", "Admin role required");
+      return;
+    }
     res.writeHead(200, corsJsonHeaders);
     res.end(JSON.stringify({ reliability: reliabilityMetrics }));
     return;
   }
   if (req.url === "/ops/reliability/reset" && req.method === "POST") {
+    if (!isAdminRole(req)) {
+      writeError(res, 403, "admin_role_required", "Admin role required");
+      return;
+    }
     resetReliabilityMetrics();
     res.writeHead(200, corsJsonHeaders);
     res.end(JSON.stringify({ ok: true, reliability: reliabilityMetrics }));
