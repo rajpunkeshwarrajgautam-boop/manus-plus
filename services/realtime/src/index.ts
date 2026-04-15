@@ -103,3 +103,15 @@ const port = Number(process.env.PORT || 4102);
 server.listen(port, () => {
   console.log(`realtime service listening on ${port}`);
 });
+
+const shutdown = (signal: string) => {
+  console.log(`realtime ${signal}, shutting down…`);
+  const force = setTimeout(() => process.exit(0), 10_000).unref();
+  wss.close((err) => {
+    clearTimeout(force);
+    if (err) console.error(err);
+    process.exit(0);
+  });
+};
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));
