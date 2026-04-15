@@ -68,6 +68,17 @@ const versionInfo = {
   version: "0.1.0",
   apiVersion: "v1"
 };
+const reliabilityMetrics = {
+  errorResponsesTotal: 0,
+  readinessFailuresTotal: 0,
+  resetAt: new Date().toISOString()
+};
+
+function resetReliabilityMetrics() {
+  reliabilityMetrics.errorResponsesTotal = 0;
+  reliabilityMetrics.readinessFailuresTotal = 0;
+  reliabilityMetrics.resetAt = new Date().toISOString();
+}
 
 function sendError(
   res: express.Response,
@@ -76,6 +87,9 @@ function sendError(
   message: string,
   extra: Record<string, unknown> = {}
 ) {
+  if (statusCode >= 400) {
+    reliabilityMetrics.errorResponsesTotal += 1;
+  }
   return res.status(statusCode).json({ errorCode, error: message, ...extra });
 }
 
@@ -159,8 +173,20 @@ app.get("/health", (_req, res) => {
     status,
     service: "skills-registry",
     uptimeSec: Math.round(process.uptime()),
-    skillCount: skills.size
+    skillCount: skills.size,
+    errorResponsesTotal: reliabilityMetrics.errorResponsesTotal,
+    readinessFailuresTotal: reliabilityMetrics.readinessFailuresTotal,
+    reliabilityMetricsResetAt: reliabilityMetrics.resetAt
   });
+});
+
+app.get("/ops/reliability", (_req, res) => {
+  res.json({ reliability: reliabilityMetrics });
+});
+
+app.post("/ops/reliability/reset", (_req, res) => {
+  resetReliabilityMetrics();
+  res.json({ ok: true, reliability: reliabilityMetrics });
 });
 
 app.get("/version", (_req, res) => {
@@ -169,6 +195,7 @@ app.get("/version", (_req, res) => {
 
 app.get("/readiness", (_req, res) => {
   if (isShuttingDown) {
+    reliabilityMetrics.readinessFailuresTotal += 1;
     return res.status(503).json({
       ok: false,
       checks: [{ name: "lifecycle", status: "fail", details: "shutting_down" }]
@@ -179,8 +206,12 @@ app.get("/readiness", (_req, res) => {
     { name: "skills_store_loaded", status: "pass", details: `skills=${skills.size}` },
     { name: "workspace_guardrails_enabled", status: "pass" }
   ];
+  const ok = checks.every((check) => check.status === "pass");
+  if (!ok) {
+    reliabilityMetrics.readinessFailuresTotal += 1;
+  }
   return res.json({
-    ok: checks.every((check) => check.status === "pass"),
+    ok,
     checks
   });
 });
