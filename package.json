@@ -28,7 +28,7 @@
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
     "docker:up": "docker compose up --build",
     "build": "npm run build --workspaces --if-present",
-    "type-check": "npm run type-check --workspaces --if-present",
+    "type-check": "npm run build -w @manus-plus/observability && npm run type-check --workspaces --if-present",
     "ci:integration": "concurrently --kill-others -s first -n apis,web,check \"npm run ci:start:apis\" \"npm run ci:start:web\" \"npm run ci:checks:runtime\""
   },
   "devDependencies": {
