@@ -19,6 +19,8 @@ interface BrowserSession {
 
 const sessions = new Map<string, BrowserSession>();
 const app = express();
+let isReady = false;
+let isShuttingDown = false;
 
 function allowBrowserDev(req: Request, res: Response, next: NextFunction) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -146,12 +148,20 @@ app.get("/version", (_req, res) => {
 });
 
 app.get("/readiness", (_req, res) => {
+  if (isShuttingDown) {
+    return res.status(503).json({
+      ok: false,
+      checks: [{ name: "lifecycle", status: "fail", details: "shutting_down" }]
+    });
+  }
+  const checks = [
+    { name: "lifecycle", status: isReady ? "pass" : "fail", details: isReady ? "ready" : "starting" },
+    { name: "session_store_loaded", status: "pass", details: `sessions=${sessions.size}` },
+    { name: "action_schema_initialized", status: "pass" }
+  ];
   return res.json({
-    ok: true,
-    checks: [
-      { name: "session_store_loaded", status: "pass", details: `sessions=${sessions.size}` },
-      { name: "action_schema_initialized", status: "pass" }
-    ]
+    ok: checks.every((check) => check.status === "pass"),
+    checks
   });
 });
 
@@ -162,11 +172,14 @@ async function bootstrap() {
     sessions.set(item.id, item);
   }
   const server = app.listen(port, () => {
+    isReady = true;
     console.log(`browser-operator listening on ${port}`);
   });
 
   const shutdown = (signal: string) => {
     console.log(`browser-operator ${signal}, shutting down…`);
+    isShuttingDown = true;
+    isReady = false;
     const force = setTimeout(() => process.exit(0), 10_000).unref();
     server.close(() => {
       clearTimeout(force);
