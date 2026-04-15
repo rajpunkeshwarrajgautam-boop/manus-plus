@@ -9,6 +9,8 @@
 3. Start the web UI in another terminal: **`npm run dev:web`** → http://localhost:3000  
    Or use one terminal: **`npm run smoke:stack`** (APIs + waiter + Next dev).
 
+4. **Desktop (Electron)** — same product as the browser: **`npm run dev:desktop`** at repo root (requires step 2 + 3). Set **`MANUS_PLUS_WEB_URL`** if the web app is not on `http://localhost:3000` (see `.env.example`).
+
 Health check (expects API processes running):
 
 ```bash
@@ -33,7 +35,7 @@ If you use Docker instead of local Node, see `docker-compose.yml` and run `npm r
 
 ## Environment
 
-See `env.example` at repo root. Copy values into `apps/web/.env.local` for Next.js public URLs.
+See `.env.example` at repo root. Copy the Next.js block into `apps/web/.env.local` for public URLs; use the Expo block in `apps/mobile/.env` on a device (LAN IP for hostnames).
 
 For Expo on a physical device, set `EXPO_PUBLIC_ORCHESTRATOR_URL` and `EXPO_PUBLIC_REALTIME_URL` to your dev machine’s LAN IP.
 

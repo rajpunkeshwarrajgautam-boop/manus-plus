@@ -2,6 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const { buildDesktopShellHtml, runtimeConfig, desktopShellState } = require("./shell-template");
 
+const DEFAULT_WEB_URL = "http://localhost:3000";
+
+function resolveWebSurfaceUrl() {
+  return process.env.MANUS_PLUS_WEB_URL || process.env.ELECTRON_WEB_URL || DEFAULT_WEB_URL;
+}
+
 function printHeader() {
   console.log("=".repeat(72));
   console.log("Manus Plus Desktop");
@@ -35,6 +41,7 @@ function createDesktopPreview() {
 function launchElectronShell() {
   // eslint-disable-next-line global-require
   const { app, BrowserWindow } = require("electron");
+  const webUrl = resolveWebSurfaceUrl();
 
   const createWindow = () => {
     const win = new BrowserWindow({
@@ -44,10 +51,13 @@ function launchElectronShell() {
       minHeight: 720,
       backgroundColor: "#080b14",
       title: "Manus Plus Desktop",
-      autoHideMenuBar: true
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
     });
-    const html = buildDesktopShellHtml();
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    void win.loadURL(webUrl);
   };
 
   app.whenReady().then(() => {
@@ -67,11 +77,12 @@ function bootDesktopShell() {
   printRuntime();
   printRuns();
   const previewPath = createDesktopPreview();
-  console.log(`\nDesktop preview HTML: ${previewPath}`);
-  console.log("Desktop parity milestones");
-  console.log("- Run `npm run dev:electron --workspace @manus-plus/desktop` for interactive shell");
-  console.log("- Wire orchestrator APIs to run and timeline components");
-  console.log("- Add desktop notifications and local run cache");
+  const webUrl = resolveWebSurfaceUrl();
+  console.log(`\nDesktop preview HTML (offline shell): ${previewPath}`);
+  console.log(`Electron loads the full web app at: ${webUrl}`);
+  console.log("Start stack: `npm run dev:apis` then `npm run dev:web`, then:");
+  console.log("  `npm run dev:electron --workspace @manus-plus/desktop`");
+  console.log(`Override URL: set MANUS_PLUS_WEB_URL (see repo .env.example).`);
 }
 
 if (process.versions.electron) {
