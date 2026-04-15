@@ -124,12 +124,15 @@ export default function HomePage() {
   const [taskFilterPhase, setTaskFilterPhase] = useState<"" | "plan" | "execute" | "verify" | "finalize">("");
   const [diagnostics, setDiagnostics] = useState<string>("No diagnostics yet.");
   const [serviceHealth, setServiceHealth] = useState<string>("No health data yet.");
+  const [serviceHealthUpdatedAt, setServiceHealthUpdatedAt] = useState<string>("");
   const [opsSnapshotCopyState, setOpsSnapshotCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [opsBundleCopyState, setOpsBundleCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [opsRefreshState, setOpsRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [runtimeConfigCopyState, setRuntimeConfigCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [serviceVersions, setServiceVersions] = useState<string>("No version data yet.");
+  const [serviceVersionsUpdatedAt, setServiceVersionsUpdatedAt] = useState<string>("");
   const [serviceReadiness, setServiceReadiness] = useState<string>("No readiness data yet.");
+  const [serviceReadinessUpdatedAt, setServiceReadinessUpdatedAt] = useState<string>("");
   const [quickMode, setQuickMode] = useState<QuickMode>("research");
   const [taskExportPreview, setTaskExportPreview] = useState<string>("No export generated yet.");
   const [showAdvancedComposer, setShowAdvancedComposer] = useState(false);
@@ -521,6 +524,7 @@ export default function HomePage() {
       return { service: name, ok: false, error: "unreachable" };
     });
     setServiceHealth(JSON.stringify(normalized, null, 2));
+    setServiceHealthUpdatedAt(new Date().toISOString());
   }, [defaultHeaders]);
 
   const refreshServiceVersions = useCallback(async () => {
@@ -536,6 +540,7 @@ export default function HomePage() {
       return { service: name, ok: false, error: "unreachable" };
     });
     setServiceVersions(JSON.stringify(normalized, null, 2));
+    setServiceVersionsUpdatedAt(new Date().toISOString());
   }, [defaultHeaders]);
 
   const refreshServiceReadiness = useCallback(async () => {
@@ -551,6 +556,7 @@ export default function HomePage() {
       return { service: name, ok: false, error: "unreachable" };
     });
     setServiceReadiness(JSON.stringify(normalized, null, 2));
+    setServiceReadinessUpdatedAt(new Date().toISOString());
   }, [defaultHeaders]);
 
   const refreshAllOpsPanels = useCallback(async () => {
@@ -1424,6 +1430,7 @@ export default function HomePage() {
                       : "Copy ops bundle"}
                 </button>
               </div>
+              <div className={styles.opsPanelMeta}>Last refreshed: {formatCheckedAt(serviceHealthUpdatedAt)}</div>
               <div className={styles.output}>{serviceHealth}</div>
             </div>
           </details>
@@ -1433,6 +1440,7 @@ export default function HomePage() {
             <summary className={styles.drawerSummary}>Service Versions</summary>
             <div className={styles.panel}>
               <button className={`${styles.btn} ${styles.iconBtn}`} onClick={refreshServiceVersions}>Refresh versions</button>
+              <div className={styles.opsPanelMeta}>Last refreshed: {formatCheckedAt(serviceVersionsUpdatedAt)}</div>
               <div className={styles.output}>{serviceVersions}</div>
             </div>
           </details>
@@ -1442,6 +1450,7 @@ export default function HomePage() {
             <summary className={styles.drawerSummary}>Service Readiness</summary>
             <div className={styles.panel}>
               <button className={`${styles.btn} ${styles.iconBtn}`} onClick={refreshServiceReadiness}>Refresh readiness</button>
+              <div className={styles.opsPanelMeta}>Last refreshed: {formatCheckedAt(serviceReadinessUpdatedAt)}</div>
               <div className={styles.output}>{serviceReadiness}</div>
             </div>
           </details>
