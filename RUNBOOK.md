@@ -35,6 +35,8 @@ Locally, **`ci:integration`** still works **without** `DATABASE_URL` (orchestrat
 
 If you use Docker instead of local Node, see `docker-compose.yml` and run `npm run docker:up` (requires Docker Engine + Compose v2). Compose sets **`DATABASE_URL`** for the orchestrator container; the image runs **`prisma migrate deploy`** before starting the server.
 
+Node API and web containers use Compose **`init: true`** (signal-friendly PID 1) and **`stop_grace_period: 15s`** so **SIGTERM** / **`docker compose stop`** can reach each process before forced exit. Services close HTTP (or WebSocket for realtime), and the orchestrator disconnects Prisma, matching local **SIGINT** / **SIGTERM** behavior (see in-process **~10s** fallback timers in each service).
+
 ### Orchestrator persistence
 
 - **File (default):** if **`DATABASE_URL`** is unset, task runs are stored in **`ORCHESTRATOR_STORE_PATH`** or, by default, **`services/orchestrator/.data/runs.json`** (relative to the orchestrator process cwd, usually the workspace package root).
