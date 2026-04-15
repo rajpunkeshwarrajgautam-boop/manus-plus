@@ -124,6 +124,7 @@ export default function HomePage() {
   const seenRemoteEventsRef = useRef<Set<string>>(new Set());
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [orchestratorStatus, setOrchestratorStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [healthAutoRefresh, setHealthAutoRefresh] = useState(true);
   const [serviceBadges, setServiceBadges] = useState<ServiceHealthBadge[]>(
     SERVICE_BADGE_DEFS.map((service) => ({ ...service, status: "checking" }))
   );
@@ -711,19 +712,21 @@ export default function HomePage() {
 
   useEffect(() => {
     void probeOrchestrator();
+    if (!healthAutoRefresh) return;
     const interval = window.setInterval(() => {
       void probeOrchestrator();
     }, 10_000);
     return () => window.clearInterval(interval);
-  }, [probeOrchestrator]);
+  }, [probeOrchestrator, healthAutoRefresh]);
 
   useEffect(() => {
     void probeServiceBadges();
+    if (!healthAutoRefresh) return;
     const interval = window.setInterval(() => {
       void probeServiceBadges();
     }, 15_000);
     return () => window.clearInterval(interval);
-  }, [probeServiceBadges]);
+  }, [probeServiceBadges, healthAutoRefresh]);
 
   useEffect(() => {
     void refreshTaskList();
@@ -822,6 +825,13 @@ export default function HomePage() {
               }}
             >
               Retry
+            </button>
+            <button
+              type="button"
+              className={styles.backendAutoToggle}
+              onClick={() => setHealthAutoRefresh((prev) => !prev)}
+            >
+              Auto: {healthAutoRefresh ? "on" : "off"}
             </button>
           </div>
           <div className={styles.backendUrl}>{ORCHESTRATOR_URL}</div>
@@ -953,6 +963,13 @@ export default function HomePage() {
               }}
             >
               Retry
+            </button>
+            <button
+              type="button"
+              className={styles.mobileHealthRetry}
+              onClick={() => setHealthAutoRefresh((prev) => !prev)}
+            >
+              Auto: {healthAutoRefresh ? "on" : "off"}
             </button>
           </div>
           <div className={styles.mobileServiceBadges}>
