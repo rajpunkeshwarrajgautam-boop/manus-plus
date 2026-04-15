@@ -22,6 +22,8 @@ npm run dev:web
 
 Open http://localhost:3000. API ports: orchestrator **4100**, browser-operator **4101**, realtime **4102**, skills **4103**.
 
+**Desktop (Electron)** loads the same web UI. After APIs + web are up: `npm run dev:desktop` (override with `MANUS_PLUS_WEB_URL`; see `.env.example`).
+
 Health checks (with APIs running):
 
 ```bash
