@@ -112,6 +112,7 @@ export default function HomePage() {
   const [taskFilterPhase, setTaskFilterPhase] = useState<"" | "plan" | "execute" | "verify" | "finalize">("");
   const [diagnostics, setDiagnostics] = useState<string>("No diagnostics yet.");
   const [serviceHealth, setServiceHealth] = useState<string>("No health data yet.");
+  const [opsSnapshotCopyState, setOpsSnapshotCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [serviceVersions, setServiceVersions] = useState<string>("No version data yet.");
   const [serviceReadiness, setServiceReadiness] = useState<string>("No readiness data yet.");
   const [quickMode, setQuickMode] = useState<QuickMode>("research");
@@ -308,6 +309,36 @@ export default function HomePage() {
       setCopiedTaskId("");
     }
   }, []);
+
+  const copyServiceSnapshot = useCallback(async () => {
+    const snapshot = {
+      generatedAt: new Date().toISOString(),
+      workspaceId,
+      role,
+      orchestratorUrl: ORCHESTRATOR_URL,
+      services: serviceBadges.map((service) => ({
+        key: service.key,
+        label: service.label,
+        url: service.url,
+        status: service.status,
+        latencyMs: service.latencyMs ?? null,
+        lastCheckedAt: service.lastCheckedAt ?? null,
+        lastErrorReason: service.lastErrorReason ?? null
+      }))
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
+      setOpsSnapshotCopyState("copied");
+      window.setTimeout(() => {
+        setOpsSnapshotCopyState("idle");
+      }, 1800);
+    } catch {
+      setOpsSnapshotCopyState("failed");
+      window.setTimeout(() => {
+        setOpsSnapshotCopyState("idle");
+      }, 1800);
+    }
+  }, [role, serviceBadges, workspaceId]);
 
   const compareTelemetry = useCallback((a: TelemetrySnapshot, b: TelemetrySnapshot) => {
     const localDelta = (b.localEventCount || 0) - (a.localEventCount || 0);
@@ -1290,7 +1321,16 @@ export default function HomePage() {
           <details className={styles.drawerSection}>
             <summary className={styles.drawerSummary}>Service Health</summary>
             <div className={styles.panel}>
-              <button className={`${styles.btn} ${styles.iconBtn}`} onClick={refreshServiceHealth}>Refresh health</button>
+              <div className={styles.inlineActions}>
+                <button className={`${styles.btn} ${styles.iconBtn}`} onClick={refreshServiceHealth}>Refresh health</button>
+                <button className={`${styles.btn} ${styles.iconBtn}`} onClick={() => void copyServiceSnapshot()}>
+                  {opsSnapshotCopyState === "copied"
+                    ? "Copied snapshot"
+                    : opsSnapshotCopyState === "failed"
+                      ? "Copy failed"
+                      : "Copy snapshot"}
+                </button>
+              </div>
               <div className={styles.output}>{serviceHealth}</div>
             </div>
           </details>
