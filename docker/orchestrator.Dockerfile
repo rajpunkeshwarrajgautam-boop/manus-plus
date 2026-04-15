@@ -7,4 +7,4 @@ COPY services/orchestrator/prisma ./prisma
 RUN npm install && npx prisma generate
 ENV NODE_ENV=production
 EXPOSE 4100
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx src/index.ts"]

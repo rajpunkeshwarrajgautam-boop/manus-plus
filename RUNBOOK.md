@@ -27,11 +27,18 @@ Ports: orchestrator **4100**, browser-operator **4101**, realtime **4102** (HTTP
 
 ### CI (GitHub Actions)
 
-On push/PR to `main` or `master`, `.github/workflows/ci.yml` runs **`npm ci`**, **`npm run type-check`**, and **`npm run ci:integration`** (starts all four APIs + **Next.js dev** on **3000**, waits for `/health` and the web root, then **`verify:health`** + **`e2e:smoke`**). Stop anything already bound to **4100–4103** and **3000** before running **`ci:integration`** locally, or you will get port conflicts.
+On push/PR to `main` or `master`, `.github/workflows/ci.yml` runs **`npm ci`**, **`npm run type-check`**, **`npm run migrate:deploy -w @manus-plus/orchestrator`** (against a **Postgres 16** service), then **`npm run ci:integration`** (all four APIs + **Next.js dev** on **3000**, **`verify:health`**, **`e2e:smoke`**). CI sets **`DATABASE_URL`** so the orchestrator uses Postgres in that job.
+
+Locally, **`ci:integration`** still works **without** `DATABASE_URL` (orchestrator uses the JSON file store under `services/orchestrator/.data/runs.json`). Stop anything already bound to **4100–4103** and **3000** before running it, or you will get port conflicts.
 
 ### Optional: Docker
 
-If you use Docker instead of local Node, see `docker-compose.yml` and run `npm run docker:up` (requires Docker Engine + Compose v2). That also starts Postgres **5432** (`manus` / `manus` / `manus`) for when Prisma is wired; the orchestrator still uses its on-disk run store until then.
+If you use Docker instead of local Node, see `docker-compose.yml` and run `npm run docker:up` (requires Docker Engine + Compose v2). Compose sets **`DATABASE_URL`** for the orchestrator container; the image runs **`prisma migrate deploy`** before starting the server.
+
+### Orchestrator persistence
+
+- **File (default):** if **`DATABASE_URL`** is unset, task runs are stored in **`ORCHESTRATOR_STORE_PATH`** or, by default, **`services/orchestrator/.data/runs.json`** (relative to the orchestrator process cwd, usually the workspace package root).
+- **Postgres:** set **`DATABASE_URL`** (see `.env.example`). Apply schema: **`npm run migrate:deploy -w @manus-plus/orchestrator`**. **`GET /health`** includes **`"persistence": "file"`** or **`"postgres"`** in the JSON body. Idempotent **`POST /tasks`** replays are resolved against Postgres when the in-memory map is cold.
 
 ## Environment
 

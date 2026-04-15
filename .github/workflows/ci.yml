@@ -15,6 +15,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: manus
+          POSTGRES_PASSWORD: manus
+          POSTGRES_DB: manus
+        options: >-
+          --health-cmd "pg_isready -U manus -d manus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://manus:manus@localhost:5432/manus
+      NEXT_TELEMETRY_DISABLED: "1"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +51,8 @@ jobs:
       - name: Typecheck
         run: npm run type-check
 
+      - name: Prisma migrate (orchestrator)
+        run: npm run migrate:deploy -w @manus-plus/orchestrator
+
       - name: Integration (APIs + Next dev + health + E2E smoke)
         run: npm run ci:integration
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"

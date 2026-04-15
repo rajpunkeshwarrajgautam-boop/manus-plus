@@ -7,54 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Workspace {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
-  users     WorkspaceMember[]
-  tasks     Task[]
-}
+/// Mirrors in-memory `TaskRun` — JSON columns keep parity with the file store format.
+model OrchestratorTaskRun {
+  id             String   @id
+  workspaceId    String
+  actorId        String
+  sessionId      String
+  idempotencyKey String?
+  prompt         String   @db.Text
+  state          String
+  phase          String
+  retryCount     Int      @default(0)
+  maxRetries     Int      @default(3)
+  checkpoints    Json
+  steps            Json
+  artifacts        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-model WorkspaceMember {
-  id          String   @id @default(uuid())
-  workspaceId String
-  userId      String
-  role        String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-}
-
-model Task {
-  id          String    @id @default(uuid())
-  workspaceId String
-  sessionId   String
-  prompt      String    @db.Text
-  state       String
-  phase       String
-  retryCount  Int       @default(0)
-  maxRetries  Int       @default(3)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  steps       TaskStep[]
-  artifacts   Artifact[]
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-}
-
-model TaskStep {
-  id        String   @id @default(uuid())
-  taskId    String
-  phase     String
-  type      String
-  content   String   @db.Text
-  createdAt DateTime @default(now())
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-}
-
-model Artifact {
-  id        String   @id @default(uuid())
-  taskId    String
-  kind      String
-  title     String
-  content   String?  @db.Text
-  createdAt DateTime @default(now())
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  @@index([workspaceId])
+  @@unique([workspaceId, idempotencyKey])
+  @@map("TaskRun")
 }
